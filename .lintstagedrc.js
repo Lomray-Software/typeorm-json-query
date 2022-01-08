@@ -1,5 +1,5 @@
 module.exports = {
-  '*.{ts}': [
+  '*.ts': [
     'eslint --max-warnings=0',
     'prettier --write',
   ]
