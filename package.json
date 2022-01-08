@@ -29,10 +29,10 @@
 	"scripts": {
 		"build": "rollup -c",
 		"test": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es6\"}' mocha --harmony --no-warnings  __tests__ --require ts-node/register --recursive --unhandled-rejections=strict --exit",
-		"prettier:format": "prettier --write 'src/**/*.{ts}'",
-		"prettier:check": "prettier --check --debug-check 'src/**/*.{ts}'",
-		"lint:check": "eslint --ext '.ts,.tsx' 'src/**/*.{ts}'",
-		"lint:format": "eslint --fix --ext '.ts,.tsx' 'src/**/*.{ts}'",
+		"prettier:format": "prettier --write 'src/**/*.{ts,*.ts}'",
+		"prettier:check": "prettier --check --debug-check 'src/**/*.{ts,*.ts}'",
+		"lint:check": "eslint --ext '.ts,.tsx' 'src/**/*.{ts,*.ts}'",
+		"lint:format": "eslint --fix --ext '.ts,.tsx' 'src/**/*.{ts,*.ts}'",
 		"ts:check": "tsc --project ./tsconfig.json --skipLibCheck --noemit",
 		"prepare": "husky install"
 	},
