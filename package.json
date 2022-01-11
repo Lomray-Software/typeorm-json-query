@@ -1,6 +1,6 @@
 {
 	"name": "@lomray/typeorm-json-query",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Service for convert JSON query to TypeORM query builder",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",

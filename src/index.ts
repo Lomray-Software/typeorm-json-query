@@ -105,7 +105,7 @@ export type IJsonQueryWhere<TEntity = ObjectLiteral> =
     }
   | FilterFields<Partial<TEntity>>;
 
-type IJsonQueryOrderField = {
+export type IJsonQueryOrderField = {
   order: keyof typeof IJsonQueryOrder;
   nulls?: keyof typeof IJsonQueryOrderNulls;
 };
