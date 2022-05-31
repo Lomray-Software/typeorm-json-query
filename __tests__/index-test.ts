@@ -169,6 +169,17 @@ describe('services/typeorm-json-query', () => {
     }
   });
 
+  it('should return attributes with deep relation aliases', () => {
+    // @ts-ignore
+    const attributes = commonInstance.getAttributes(['id', 'rel1.id', 'rel1.rel2.id']);
+
+    expect(attributes).to.deep.equal([
+      ...withAlias([...commonQueryAttributes, ...commonAuthQueryAttributes]),
+      'rel1.id',
+      'rel1_rel2.id',
+    ]);
+  });
+
   it('should return empty order: disable orderBy', () => {
     const instance = TypeormJsonQuery.init(
       {
@@ -337,7 +348,7 @@ describe('services/typeorm-json-query', () => {
     expect(relations).to.deep.equal([
       {
         property: withAlias(commonRelations[0]),
-        table: commonRelations[0],
+        alias: commonRelations[0],
         where: undefined,
         parameters: undefined,
       },
@@ -350,9 +361,35 @@ describe('services/typeorm-json-query', () => {
     expect(relations).to.deep.equal([
       {
         property: withAlias(commonRelations[0]),
-        table: commonRelations[0],
+        alias: commonRelations[0],
         where: 'demoRelation.id = :demoRelation.id_1',
         parameters: { 'demoRelation.id_1': 1 },
+      },
+    ]);
+  });
+
+  it('should success return query with deep relations', () => {
+    const relations = emptyInstance.getRelations([
+      { name: 'rel1', where: { id: 1 } },
+      { name: 'rel1.rel2', where: { id: 2 } },
+    ]);
+
+    expect(relations).to.deep.equal([
+      {
+        alias: 'rel1',
+        parameters: {
+          'rel1.id_1': 1,
+        },
+        property: 'TestEntity.rel1',
+        where: 'rel1.id = :rel1.id_1',
+      },
+      {
+        alias: 'rel1_rel2',
+        parameters: {
+          'rel1_rel2.id_2': 2,
+        },
+        property: 'rel1.rel2',
+        where: 'rel1_rel2.id = :rel1_rel2.id_2',
       },
     ]);
   });

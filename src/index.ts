@@ -157,7 +157,7 @@ interface IJsonOrderByResult {
 
 interface IJsonRelationResult {
   property: string;
-  table: string;
+  alias: string;
   where?: string;
   parameters?: Record<string, any>;
 }
@@ -276,7 +276,14 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * @private
    */
   private withFieldAlias(field: string, alias: string = this.queryBuilder.alias): string {
-    return field.includes('.') ? field : [alias, field].join('.');
+    // for relation
+    if (field.includes('.')) {
+      // '1.2.3.4' => '123.4'
+      return field.replace(/[.](?=.*[.])/g, '_');
+    }
+
+    // for entity
+    return [alias, field].join('.');
   }
 
   /**
@@ -403,19 +410,20 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
       let whereCondition;
       let whereParameters;
+      const alias = name.replace(/\./g, '_');
 
       if (where) {
         const relationWhere = this.queryBuilder.connection
           .createQueryBuilder()
-          .from(name, name)
-          .where((qb) => this.parseCondition(where, qb, name));
+          .from(name, alias)
+          .where((qb) => this.parseCondition(where, qb, alias));
 
         [whereCondition, whereParameters] = TypeormJsonQuery.qbWhereParse(relationWhere);
       }
 
       return {
         property: this.withFieldAlias(name),
-        table: name,
+        alias,
         where: whereCondition,
         parameters: whereParameters,
       };
@@ -681,8 +689,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     sorting.forEach(({ field, value, nulls }) => queryBuilder.addOrderBy(field, value, nulls));
-    includes.forEach(({ property, table, where: relationWhere, parameters }) =>
-      queryBuilder.leftJoinAndSelect(property, table, relationWhere, parameters),
+    includes.forEach(({ property, alias, where: relationWhere, parameters }) =>
+      queryBuilder.leftJoinAndSelect(property, alias, relationWhere, parameters),
     );
     conditions.forEach((condition) => queryBuilder.andWhere(condition));
 
