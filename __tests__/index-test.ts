@@ -4,6 +4,7 @@ import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
 import TypeormJsonQuery, {
   IJsonQuery,
+  IJsonQueryFieldType,
   IJsonQueryJunction,
   IJsonQueryOperator,
   IJsonQueryOrder,
@@ -489,6 +490,15 @@ describe('services/typeorm-json-query', () => {
     expect(result).to.throw('have unknown condition');
   });
 
+  it('should apply where condition: "="', () => {
+    const [result] = emptyInstance.getWhere({ id: { [IJsonQueryOperator.equal]: 1 } });
+
+    expect(bracketToWhere(result)).to.deep.equal([
+      '("TestEntity"."id" = :TestEntity.id_1)',
+      { 'TestEntity.id_1': 1 },
+    ]);
+  });
+
   it('should apply where condition: "!="', () => {
     const [result] = emptyInstance.getWhere({ id: { [IJsonQueryOperator.notEqual]: 1 } });
 
@@ -660,6 +670,29 @@ describe('services/typeorm-json-query', () => {
       );
 
     expect(result).to.throw('comparison invalid value');
+  });
+
+  it('should apply cast type to field', () => {
+    const [result] = emptyInstance.getWhere({
+      id: { [IJsonQueryOperator.like]: '%test%', type: IJsonQueryFieldType.text },
+    });
+
+    expect(bracketToWhere(result)).to.deep.equal([
+      '(TestEntity.id::text LIKE :TestEntity.id_1)',
+      { 'TestEntity.id_1': '%test%' },
+    ]);
+  });
+
+  it('should throw error with invalid field cast type', () => {
+    const result = () =>
+      runCondition(
+        emptyInstance.getWhere({
+          // @ts-ignore
+          id: { [IJsonQueryOperator.like]: '%test%', type: 'invalid' },
+        }),
+      );
+
+    expect(result).to.throw('field type "invalid" is invalid.');
   });
 
   it('should return right query', () => {

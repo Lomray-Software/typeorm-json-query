@@ -9,7 +9,9 @@ type XOR<T, TU> = T | TU extends Record<string, any>
   ? (Without<T, TU> & TU) | (Without<TU, T> & T)
   : T | TU;
 
-export type ObjectLiteral = Record<string | symbol, any>;
+export type ToObject<T> = T extends readonly any[] ? T[0] : T;
+
+export type ObjectLiteral = Record<string | symbol | number, any>;
 
 export enum IJsonQueryOrder {
   ASC = 'ASC',
@@ -21,12 +23,17 @@ export enum IJsonQueryOrderNulls {
   last = 'last',
 }
 
+export enum IJsonQueryFieldType {
+  text = 'text',
+}
+
 export enum IJsonQueryOperator {
   between = 'between',
   like = 'like',
   in = 'in',
   notIn = '!in',
   notEqual = '!=',
+  equal = '=',
   greater = '>',
   greaterOrEqual = '>=',
   less = '<',
@@ -53,35 +60,43 @@ type XOR_MULTIPLE<TR extends unknown[]> = {
   1: TR extends readonly [infer U, ...infer V] ? CurryXOR<U, V>[0] : never;
 }[TR extends readonly [infer _, ...infer __] ? 1 : 0];
 
-type NonEmptyArray<T> = [T, ...T[]];
-type FilterValue = string | number | null;
+export type NonEmptyArray<T> = [T, ...T[]];
 
-export type FilterLess = { [IJsonQueryOperator.less]: FilterValue };
+export type FilterValue = string | number | null;
 
-export type FilterLessOrEqual = { [IJsonQueryOperator.lessOrEqual]: FilterValue };
+export type FilterOptions = { type?: IJsonQueryFieldType };
 
-export type FilterGreater = { [IJsonQueryOperator.greater]: FilterValue };
+export type FilterLess = { [IJsonQueryOperator.less]: FilterValue } & FilterOptions;
 
-export type FilterGreaterOrEqual = { [IJsonQueryOperator.greaterOrEqual]: FilterValue };
+export type FilterLessOrEqual = { [IJsonQueryOperator.lessOrEqual]: FilterValue } & FilterOptions;
+
+export type FilterGreater = { [IJsonQueryOperator.greater]: FilterValue } & FilterOptions;
+
+export type FilterGreaterOrEqual = {
+  [IJsonQueryOperator.greaterOrEqual]: FilterValue;
+} & FilterOptions;
 
 export type FilterCondition = XOR_MULTIPLE<
   [
     {
+      [IJsonQueryOperator.equal]: FilterValue;
+    } & FilterOptions,
+    {
       [IJsonQueryOperator.notEqual]: FilterValue;
-    },
+    } & FilterOptions,
     {
       [IJsonQueryOperator.between]: [FilterValue, FilterValue];
       isIncludes?: boolean;
-    },
+    } & FilterOptions,
     {
       [IJsonQueryOperator.like]: string;
-    },
+    } & FilterOptions,
     {
       [IJsonQueryOperator.in]: NonEmptyArray<FilterValue>;
-    },
+    } & FilterOptions,
     {
       [IJsonQueryOperator.notIn]: NonEmptyArray<FilterValue>;
-    },
+    } & FilterOptions,
     XOR_MULTIPLE<
       [
         FilterLess,
@@ -94,8 +109,20 @@ export type FilterCondition = XOR_MULTIPLE<
   ]
 >;
 
+export type WithRelationFields<
+  TE extends ObjectLiteral,
+  TP extends string | number | symbol,
+> = ToObject<TE[TP]> extends ObjectLiteral
+  ? // @ts-ignore
+    keyof { [PF in keyof ToObject<TE[TP]> as `${TP}.${PF}`]: string }
+  : never;
+
 export type FilterFields<TEntity = ObjectLiteral> = {
-  [field in keyof TEntity]: string | number | null | FilterCondition;
+  [P in keyof TEntity as WithRelationFields<TEntity, P> | P]:
+    | string
+    | number
+    | null
+    | FilterCondition;
 };
 
 export type IJsonQueryWhere<TEntity = ObjectLiteral> =
@@ -117,7 +144,7 @@ export interface IJsonQuery<TEntity = ObjectLiteral> {
   };
   page?: number;
   pageSize?: number;
-  relations?: string[] | IJsonQueryRelation[];
+  relations?: (string | IJsonQueryRelation)[];
   where?: IJsonQueryWhere<TEntity>;
 }
 
@@ -459,6 +486,24 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Apply cast to field
+   * @private
+   */
+  private static applyCast(field: string, options: FilterCondition): string {
+    if (typeof options !== 'object' || options === null || !options?.type) {
+      return field;
+    }
+
+    const { type } = options;
+
+    if (!(type in IJsonQueryFieldType)) {
+      throw new Error(`Invalid json query: ${field} field type "${type}" is invalid.`);
+    }
+
+    return `${field}::${type}`;
+  }
+
+  /**
    * Apply condition for field
    * @private
    */
@@ -474,8 +519,16 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const parameter = this.uniqueParameter(field);
 
     // equal
-    if (['number', 'string'].includes(typeof condition) || condition === null) {
-      qb.andWhere(`${field} = :${parameter}`, { [parameter]: condition });
+    if (
+      ['number', 'string'].includes(typeof condition) ||
+      condition === null ||
+      condition.hasOwnProperty(IJsonQueryOperator.equal)
+    ) {
+      const value = condition?.[IJsonQueryOperator.equal] ?? condition;
+
+      qb.andWhere(`${TypeormJsonQuery.applyCast(field, condition)} = :${parameter}`, {
+        [parameter]: value,
+      });
 
       return;
     }
@@ -491,7 +544,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         );
       }
 
-      qb.andWhere(`${field} != :${parameter}`, { [parameter]: value });
+      qb.andWhere(`${TypeormJsonQuery.applyCast(field, condition)} != :${parameter}`, {
+        [parameter]: value,
+      });
 
       return;
     }
@@ -505,7 +560,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         throw new Error(`Invalid json query: (${field}) "like" should be string.`);
       }
 
-      qb.andWhere(`${field} LIKE :${parameter}`, { [parameter]: value });
+      qb.andWhere(`${TypeormJsonQuery.applyCast(field, condition)} LIKE :${parameter}`, {
+        [parameter]: value,
+      });
 
       return;
     }
@@ -523,7 +580,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         throw new Error(`Invalid json query: (${field}) "in or !in" should be array.`);
       }
 
-      qb.andWhere(`${field}${isNot} IN (:...${parameter})`, { [parameter]: value });
+      qb.andWhere(`${TypeormJsonQuery.applyCast(field, condition)}${isNot} IN (:...${parameter})`, {
+        [parameter]: value,
+      });
 
       return;
     }
@@ -559,7 +618,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       });
 
       const expressions = [less, greater].map(
-        ({ value, operator }, i) => value !== undefined && `${field} ${operator} :${parameter}${i}`,
+        ({ value, operator }, i) =>
+          value !== undefined &&
+          `${TypeormJsonQuery.applyCast(field, condition)} ${operator} :${parameter}${i}`,
       );
       const parameters = [less.value, greater.value].reduce((res, val, i) => {
         if (val === undefined) {
@@ -590,7 +651,13 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       }
 
       qb.andWhere(
-        `${field} >${isIncludes} :${parameter}min AND ${field} <${isIncludes} :${parameter}max`,
+        `${TypeormJsonQuery.applyCast(
+          field,
+          condition,
+        )} >${isIncludes} :${parameter}min AND ${TypeormJsonQuery.applyCast(
+          field,
+          condition,
+        )} <${isIncludes} :${parameter}max`,
         {
           [`${parameter}min`]: values[0],
           [`${parameter}max`]: values[1],
