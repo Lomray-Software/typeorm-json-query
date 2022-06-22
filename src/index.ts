@@ -90,6 +90,7 @@ export type FilterCondition = XOR_MULTIPLE<
     } & FilterOptions,
     {
       [IJsonQueryOperator.like]: string;
+      insensitive?: boolean;
     } & FilterOptions,
     {
       [IJsonQueryOperator.in]: NonEmptyArray<FilterValue>;
@@ -486,10 +487,21 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Add quotes to field
+   * @private
+   */
+  private static quoteColumn(field: string): string {
+    return field
+      ?.split('.')
+      .map((part) => `"${part}"`)
+      .join('.');
+  }
+
+  /**
    * Apply cast to field
    * @private
    */
-  private static applyCast(field: string, options: FilterCondition): string {
+  private static getCastField(field: string, options: FilterCondition): string {
     if (typeof options !== 'object' || options === null || !options?.type) {
       return field;
     }
@@ -497,10 +509,10 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const { type } = options;
 
     if (!(type in IJsonQueryFieldType)) {
-      throw new Error(`Invalid json query: ${field} field type "${type}" is invalid.`);
+      throw new Error(`Invalid json query: field type cast "${type}" is invalid.`);
     }
 
-    return `${field}::${type}`;
+    return `${TypeormJsonQuery.quoteColumn(field)}::${type}`;
   }
 
   /**
@@ -517,6 +529,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     const parameter = this.uniqueParameter(field);
+    const castField = TypeormJsonQuery.getCastField(field, condition);
 
     // equal
     if (
@@ -526,7 +539,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     ) {
       const value = condition?.[IJsonQueryOperator.equal] ?? condition;
 
-      qb.andWhere(`${TypeormJsonQuery.applyCast(field, condition)} = :${parameter}`, {
+      qb.andWhere(`${castField} = :${parameter}`, {
         [parameter]: value,
       });
 
@@ -544,7 +557,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         );
       }
 
-      qb.andWhere(`${TypeormJsonQuery.applyCast(field, condition)} != :${parameter}`, {
+      qb.andWhere(`${castField} != :${parameter}`, {
         [parameter]: value,
       });
 
@@ -560,7 +573,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         throw new Error(`Invalid json query: (${field}) "like" should be string.`);
       }
 
-      qb.andWhere(`${TypeormJsonQuery.applyCast(field, condition)} LIKE :${parameter}`, {
+      const operator = condition?.insensitive ? 'ILIKE' : 'LIKE';
+
+      qb.andWhere(`${castField} ${operator} :${parameter}`, {
         [parameter]: value,
       });
 
@@ -580,7 +595,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         throw new Error(`Invalid json query: (${field}) "in or !in" should be array.`);
       }
 
-      qb.andWhere(`${TypeormJsonQuery.applyCast(field, condition)}${isNot} IN (:...${parameter})`, {
+      qb.andWhere(`${castField}${isNot} IN (:...${parameter})`, {
         [parameter]: value,
       });
 
@@ -619,8 +634,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
       const expressions = [less, greater].map(
         ({ value, operator }, i) =>
-          value !== undefined &&
-          `${TypeormJsonQuery.applyCast(field, condition)} ${operator} :${parameter}${i}`,
+          value !== undefined && `${castField} ${operator} :${parameter}${i}`,
       );
       const parameters = [less.value, greater.value].reduce((res, val, i) => {
         if (val === undefined) {
@@ -651,13 +665,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       }
 
       qb.andWhere(
-        `${TypeormJsonQuery.applyCast(
-          field,
-          condition,
-        )} >${isIncludes} :${parameter}min AND ${TypeormJsonQuery.applyCast(
-          field,
-          condition,
-        )} <${isIncludes} :${parameter}max`,
+        `${castField} >${isIncludes} :${parameter}min AND ${castField} <${isIncludes} :${parameter}max`,
         {
           [`${parameter}min`]: values[0],
           [`${parameter}max`]: values[1],

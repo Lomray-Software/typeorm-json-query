@@ -2,8 +2,8 @@ import { expect } from 'chai';
 import type { Brackets } from 'typeorm';
 import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
+import type { IJsonQuery } from '@src/index';
 import TypeormJsonQuery, {
-  IJsonQuery,
   IJsonQueryFieldType,
   IJsonQueryJunction,
   IJsonQueryOperator,
@@ -525,6 +525,17 @@ describe('services/typeorm-json-query', () => {
     ]);
   });
 
+  it('should apply where condition: "like" insensitive', () => {
+    const [result] = emptyInstance.getWhere({
+      id: { [IJsonQueryOperator.like]: '%test$', insensitive: true },
+    });
+
+    expect(bracketToWhere(result)).to.deep.equal([
+      '("TestEntity"."id" ILIKE :TestEntity.id_1)',
+      { 'TestEntity.id_1': '%test$' },
+    ]);
+  });
+
   it('should throw where condition: "like" is invalid', () => {
     const result = () =>
       // @ts-ignore
@@ -678,7 +689,7 @@ describe('services/typeorm-json-query', () => {
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
-      '(TestEntity.id::text LIKE :TestEntity.id_1)',
+      '("TestEntity"."id"::text LIKE :TestEntity.id_1)',
       { 'TestEntity.id_1': '%test%' },
     ]);
   });
@@ -692,7 +703,7 @@ describe('services/typeorm-json-query', () => {
         }),
       );
 
-    expect(result).to.throw('field type "invalid" is invalid.');
+    expect(result).to.throw('field type cast "invalid" is invalid.');
   });
 
   it('should return right query', () => {
