@@ -110,20 +110,30 @@ export type FilterCondition = XOR_MULTIPLE<
   ]
 >;
 
+/**
+ * Extends relations from this interface
+ */
+export interface IRelation {
+  isRelation?: boolean;
+}
+
 export type WithRelationFields<
   TE extends ObjectLiteral,
   TP extends string | number | symbol,
-> = ToObject<TE[TP]> extends ObjectLiteral
+> = ToObject<TE[TP]> extends IRelation
   ? // @ts-ignore
     keyof { [PF in keyof ToObject<TE[TP]> as `${TP}.${PF}`]: string }
   : never;
 
+// Get entity keys and keys with relations
+export type TEntityFields<TEntity> = keyof {
+  [P in keyof TEntity as WithRelationFields<TEntity, P> | P]: any;
+};
+
+export type TFieldCondition = string | number | null | FilterCondition;
+
 export type FilterFields<TEntity = ObjectLiteral> = {
-  [P in keyof TEntity as WithRelationFields<TEntity, P> | P]:
-    | string
-    | number
-    | null
-    | FilterCondition;
+  [field in TEntityFields<TEntity>]?: TFieldCondition;
 };
 
 export type IJsonQueryWhere<TEntity = ObjectLiteral> =
@@ -131,7 +141,7 @@ export type IJsonQueryWhere<TEntity = ObjectLiteral> =
       [IJsonQueryJunction.and]?: NonEmptyArray<IJsonQueryWhere<TEntity>>;
       [IJsonQueryJunction.or]?: NonEmptyArray<IJsonQueryWhere<TEntity>>;
     }
-  | FilterFields<Partial<TEntity>>;
+  | FilterFields<TEntity>;
 
 export type IJsonQueryOrderField = {
   order: keyof typeof IJsonQueryOrder;
