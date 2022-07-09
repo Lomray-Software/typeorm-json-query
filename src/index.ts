@@ -1,6 +1,13 @@
 import type { WhereExpressionBuilder, SelectQueryBuilder } from 'typeorm';
 import { Brackets } from 'typeorm';
 
+/**
+ * Extends entity from this interface
+ */
+export interface IEntity {
+  isEntity: true;
+}
+
 type Without<T, TU> = {
   [P in Exclude<keyof T, keyof TU>]?: never;
 };
@@ -45,9 +52,10 @@ export enum IJsonQueryJunction {
   or = 'or',
 }
 
-export interface IJsonQueryRelation {
-  name: string;
-  where?: IJsonQueryWhere;
+export interface IJsonQueryRelation<TEntity = ObjectLiteral, TN = TEntityRelations<TEntity>> {
+  name: TN;
+  // @ts-ignore
+  where?: IJsonQueryWhere<Pick<TEntity, TN>>;
 }
 
 type CurryXOR<T, TR extends unknown[]> = {
@@ -110,25 +118,51 @@ export type FilterCondition = XOR_MULTIPLE<
   ]
 >;
 
-/**
- * Extends relations from this interface
- */
-export interface IRelation {
-  isRelation?: boolean;
-}
-
 export type WithRelationFields<
   TE extends ObjectLiteral,
   TP extends string | number | symbol,
-> = ToObject<TE[TP]> extends IRelation
-  ? // @ts-ignore
-    keyof { [PF in keyof ToObject<TE[TP]> as `${TP}.${PF}`]: string }
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  TExistKeys = {},
+> = ToObject<TE[TP]> extends IEntity
+  ? TExistKeys extends { [key in TP]: any } // avoid infinite recursion
+    ? never
+    : keyof {
+        // @ts-ignore
+        // eslint-disable-next-line prettier/prettier
+        [PF in keyof Omit<ToObject<TE[TP]>, keyof IEntity> as `${TP}.${WithRelationFields<
+          ToObject<TE[TP]>,
+          PF,
+          { [key in TP | keyof TExistKeys]: any }
+        >}`]: string;
+      } // return relation fields
+  : TP; // or return entity field
+
+export type WithRelations<
+  TE extends ObjectLiteral,
+  TP extends string | number | symbol,
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  TExistKeys = {},
+> = ToObject<TE[TP]> extends IEntity
+  ? TExistKeys extends { [key in TP]: any } // avoid infinite recursion
+    ? never
+    : keyof {
+        // @ts-ignore
+        // eslint-disable-next-line prettier/prettier
+        [PF in keyof ToObject<TE[TP]> as `${TP}.${WithRelations<ToObject<TE[TP]>, PF, { [key in TP | keyof TExistKeys]: any }>}` | TP]: any;
+      }
   : never;
 
-// Get entity keys and keys with relations
-export type TEntityFields<TEntity> = keyof {
-  [P in keyof TEntity as WithRelationFields<TEntity, P> | P]: any;
+export type TEntityRelations<TEntity> = keyof {
+  [P in keyof TEntity as WithRelations<TEntity, P>]: any;
 };
+
+// Get entity keys and keys with relations
+export type TEntityFields<TEntity> = keyof Omit<
+  {
+    [P in keyof TEntity as WithRelationFields<TEntity, P>]: any;
+  },
+  keyof IEntity
+>;
 
 export type TFieldCondition = string | number | null | FilterCondition;
 
@@ -149,14 +183,14 @@ export type IJsonQueryOrderField = {
 };
 
 export interface IJsonQuery<TEntity = ObjectLiteral> {
-  attributes?: (keyof TEntity)[];
+  attributes?: TEntityFields<TEntity>[];
+  relations?: (TEntityRelations<TEntity> | IJsonQueryRelation<TEntity>)[];
+  where?: IJsonQueryWhere<TEntity>;
   orderBy?: {
-    [field in keyof TEntity]?: keyof typeof IJsonQueryOrder | IJsonQueryOrderField;
+    [field in TEntityFields<TEntity>]?: keyof typeof IJsonQueryOrder | IJsonQueryOrderField;
   };
   page?: number;
   pageSize?: number;
-  relations?: (string | IJsonQueryRelation)[];
-  where?: IJsonQueryWhere<TEntity>;
 }
 
 export interface IJsonQueryAuth<TEntity = ObjectLiteral>
@@ -170,7 +204,7 @@ export interface IJsonQueryAuth<TEntity = ObjectLiteral>
   isDisablePagination?: boolean;
 }
 
-interface ITypeormJsonQueryArgs<TEntity = ObjectLiteral> {
+export interface ITypeormJsonQueryArgs<TEntity = ObjectLiteral> {
   queryBuilder: SelectQueryBuilder<TEntity>;
   query?: IJsonQuery<TEntity>;
   authQuery?: IJsonQueryAuth<TEntity>;
@@ -187,13 +221,13 @@ export interface ITypeormJsonQueryOptions {
   isDisablePagination?: boolean;
 }
 
-interface IJsonOrderByResult {
+export interface IJsonOrderByResult {
   field: string;
   value: IJsonQueryOrder;
   nulls: 'NULLS FIRST' | 'NULLS LAST';
 }
 
-interface IJsonRelationResult {
+export interface IJsonRelationResult {
   property: string;
   alias: string;
   where?: string;
