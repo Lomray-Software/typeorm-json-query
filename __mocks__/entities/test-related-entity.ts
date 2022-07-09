@@ -1,7 +1,8 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { CEntity } from '@src/index';
 
 @Entity()
-class TestRelatedEntity {
+class TestRelatedEntity extends CEntity {
   @PrimaryGeneratedColumn()
   id: number;
 

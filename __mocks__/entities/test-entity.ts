@@ -1,8 +1,9 @@
 import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { CEntity } from '@src/index';
 import TestRelatedEntity from './test-related-entity';
 
 @Entity()
-class TestEntity {
+class TestEntity extends CEntity {
   @PrimaryGeneratedColumn()
   id: number;
 

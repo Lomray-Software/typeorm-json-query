@@ -20,10 +20,10 @@ describe('services/typeorm-json-query', () => {
       : [alias, fields].join('.');
   const types = ['', null, {}]; // invalid types
 
-  const commonQueryAttributes = ['id'] as (keyof TestEntity)[];
-  const commonAuthQueryAttributes = ['param'] as (keyof TestEntity)[];
+  const commonQueryAttributes = ['id'] as IJsonQuery<TestEntity>['attributes'];
+  const commonAuthQueryAttributes = ['param'] as IJsonQuery<TestEntity>['attributes'];
   const commonOrderBy = { id: IJsonQueryOrder.DESC } as IJsonQuery<TestEntity>['orderBy'];
-  const commonRelations = ['demoRelation'];
+  const commonRelations = ['testRelation'] as IJsonQuery<TestEntity>['relations'];
   const defaultPageSize = 25;
 
   const commonInstance = TypeormJsonQuery.init({
@@ -148,7 +148,10 @@ describe('services/typeorm-json-query', () => {
     const attributes = commonInstance.getAttributes();
 
     expect(attributes).to.deep.equal(
-      withAlias([...commonQueryAttributes, ...commonAuthQueryAttributes]),
+      withAlias([
+        ...(commonQueryAttributes as string[]),
+        ...(commonAuthQueryAttributes as string[]),
+      ]),
     );
   });
 
@@ -157,7 +160,10 @@ describe('services/typeorm-json-query', () => {
     const attributes = commonInstance.getAttributes([attr]);
 
     expect(attributes).to.deep.equal(
-      withAlias([...commonQueryAttributes, ...commonAuthQueryAttributes]),
+      withAlias([
+        ...(commonQueryAttributes as string[]),
+        ...(commonAuthQueryAttributes as string[]),
+      ]),
     );
   });
 
@@ -175,10 +181,40 @@ describe('services/typeorm-json-query', () => {
     const attributes = commonInstance.getAttributes(['id', 'rel1.id', 'rel1.rel2.id']);
 
     expect(attributes).to.deep.equal([
-      ...withAlias([...commonQueryAttributes, ...commonAuthQueryAttributes]),
+      ...withAlias([
+        ...(commonQueryAttributes as string[]),
+        ...(commonAuthQueryAttributes as string[]),
+      ]),
       'rel1.id',
       'rel1_rel2.id',
     ]);
+  });
+
+  it('should return empty group by attributes: disable attributes', () => {
+    const instance = TypeormJsonQuery.init(
+      {
+        queryBuilder,
+        query: { groupBy: ['id'] },
+      },
+      { isDisableGroupBy: true },
+    );
+
+    expect(instance.getGroupBy(['param'])).to.deep.equal([]);
+  });
+
+  it('should return group by attributes with aliases', () => {
+    const groupByAttr = commonInstance.getGroupBy(['id']);
+
+    expect(groupByAttr).to.deep.equal(withAlias(['id']));
+  });
+
+  it('should throw error: invalid group by attribute names', () => {
+    for (const type of types) {
+      // @ts-ignore
+      const result = () => commonInstance.getGroupBy([type]);
+
+      expect(result).to.throw('some group by attribute has incorrect name.');
+    }
   });
 
   it('should return empty order: disable orderBy', () => {
@@ -332,15 +368,15 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should empty relations: disabled', () => {
-    const instance = TypeormJsonQuery.init(
+    const instance = TypeormJsonQuery.init<TestEntity>(
       {
         queryBuilder,
-        query: { relations: ['test'] },
+        query: { relations: ['testRelation'] },
       },
       { isDisableRelations: true },
     );
 
-    expect(instance.getRelations(['demo'])).to.deep.equal([]);
+    expect(instance.getRelations(['testRelation'])).to.deep.equal([]);
   });
 
   it('should success return relations', () => {
@@ -348,8 +384,8 @@ describe('services/typeorm-json-query', () => {
 
     expect(relations).to.deep.equal([
       {
-        property: withAlias(commonRelations[0]),
-        alias: commonRelations[0],
+        property: withAlias(commonRelations?.[0] as string),
+        alias: commonRelations?.[0],
         where: undefined,
         parameters: undefined,
       },
@@ -357,14 +393,16 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should success return relations with conditions', () => {
-    const relations = emptyInstance.getRelations([{ name: commonRelations[0], where: { id: 1 } }]);
+    const relations = emptyInstance.getRelations([
+      { name: commonRelations?.[0], where: { id: 1 } },
+    ] as any[]);
 
     expect(relations).to.deep.equal([
       {
-        property: withAlias(commonRelations[0]),
-        alias: commonRelations[0],
-        where: 'demoRelation.id = :demoRelation.id_1',
-        parameters: { 'demoRelation.id_1': 1 },
+        property: withAlias(commonRelations?.[0] as string),
+        alias: commonRelations?.[0],
+        where: 'testRelation.id = :testRelation.id_1',
+        parameters: { 'testRelation.id_1': 1 },
       },
     ]);
   });
@@ -373,7 +411,7 @@ describe('services/typeorm-json-query', () => {
     const relations = emptyInstance.getRelations([
       { name: 'rel1', where: { id: 1 } },
       { name: 'rel1.rel2', where: { id: 2 } },
-    ]);
+    ] as any[]);
 
     expect(relations).to.deep.equal([
       {
@@ -407,7 +445,8 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should throw error: max deep relation reached', () => {
-    const result = () => commonInstance.getRelations(['level1.level2.level3.level4']);
+    const result = () =>
+      commonInstance.getRelations(['level1.level2.level3.level4.level5'] as any[]);
 
     expect(result).to.throw('reached maximum depth');
   });
@@ -709,14 +748,14 @@ describe('services/typeorm-json-query', () => {
   it('should return right query', () => {
     const qbResult = TypeormJsonQuery.init({
       queryBuilder,
-      query: { where: { id: 1 }, orderBy: { id: IJsonQueryOrder.ASC } },
+      query: { where: { id: 1 }, orderBy: { id: IJsonQueryOrder.ASC }, groupBy: ['id'] },
       authQuery: { where: { param: 'auth' } },
     })
       .toQuery()
       .getQuery();
 
     expect(qbResult).to.equal(
-      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId" FROM "test_entity" "TestEntity" WHERE ("TestEntity"."id" = :TestEntity.id_1) AND ("TestEntity"."param" = :TestEntity.param_2) ORDER BY "TestEntity"."id" ASC LIMIT 25',
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId" FROM "test_entity" "TestEntity" WHERE ("TestEntity"."id" = :TestEntity.id_1) AND ("TestEntity"."param" = :TestEntity.param_2) GROUP BY "TestEntity"."id" ORDER BY "TestEntity"."id" ASC LIMIT 25',
     );
   });
 

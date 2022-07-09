@@ -2,10 +2,17 @@ import type { WhereExpressionBuilder, SelectQueryBuilder } from 'typeorm';
 import { Brackets } from 'typeorm';
 
 /**
- * Extends entity from this interface
+ * Extends entity interface from this interface
  */
 export interface IEntity {
-  isEntity: true;
+  isEntity?: never;
+}
+
+/**
+ * Extends entity class from this class
+ */
+export class CEntity implements IEntity {
+  isEntity?: never;
 }
 
 type Without<T, TU> = {
@@ -146,9 +153,11 @@ export type WithRelations<
   ? TExistKeys extends { [key in TP]: any } // avoid infinite recursion
     ? never
     : keyof {
-        // @ts-ignore
         // eslint-disable-next-line prettier/prettier
-        [PF in keyof ToObject<TE[TP]> as `${TP}.${WithRelations<ToObject<TE[TP]>, PF, { [key in TP | keyof TExistKeys]: any }>}` | TP]: any;
+        [PF in keyof ToObject<TE[TP]> as
+        // @ts-ignore
+        | `${TP}.${WithRelations<ToObject<TE[TP]>, PF, { [key in TP | keyof TExistKeys]: any }>}`
+          | TP]: any;
       }
   : never;
 
@@ -189,6 +198,7 @@ export interface IJsonQuery<TEntity = ObjectLiteral> {
   orderBy?: {
     [field in TEntityFields<TEntity>]?: keyof typeof IJsonQueryOrder | IJsonQueryOrderField;
   };
+  groupBy?: TEntityFields<TEntity>[];
   page?: number;
   pageSize?: number;
 }
@@ -218,6 +228,7 @@ export interface ITypeormJsonQueryOptions {
   isDisableRelations?: boolean;
   isDisableAttributes?: boolean;
   isDisableOrderBy?: boolean;
+  isDisableGroupBy?: boolean;
   isDisablePagination?: boolean;
 }
 
@@ -259,12 +270,13 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    */
   private readonly options: ITypeormJsonQueryOptions = {
     defaultPageSize: 25,
-    maxPageSize: 200,
-    maxDeepRelation: 3,
+    maxPageSize: 100,
+    maxDeepRelation: 4,
     maxDeepWhere: 5,
     isDisableAttributes: false,
     isDisableRelations: false,
     isDisableOrderBy: false,
+    isDisableGroupBy: false,
     isDisablePagination: false,
   };
 
@@ -430,6 +442,29 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     return Object.values(result);
+  }
+
+  /**
+   * Get query group by attributes
+   */
+  public getGroupBy(attrs: IJsonQuery<TEntity>['groupBy'] = []): string[] {
+    if (this.options.isDisableGroupBy) {
+      return [];
+    }
+
+    const attributes = [
+      ...(this.query.groupBy || []),
+      ...(this.authQuery.groupBy || []),
+      ...attrs,
+    ].map((field) => {
+      if (!field || typeof field !== 'string') {
+        throw new Error('Invalid json query: some group by attribute has incorrect name.');
+      }
+
+      return this.withFieldAlias(field);
+    });
+
+    return [...new Set(attributes)];
   }
 
   /**
@@ -791,17 +826,19 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    */
   public toQuery({
     attributes,
-    orderBy,
-    page,
-    pageSize,
     relations,
     where,
+    orderBy,
+    groupBy,
+    page,
+    pageSize,
   }: IJsonQuery<TEntity> = {}): ITypeormJsonQueryArgs<TEntity>['queryBuilder'] {
     const queryBuilder = this.queryBuilder.clone();
     const select = this.getAttributes(attributes);
-    const sorting = this.getOrderBy(orderBy);
     const includes = this.getRelations(relations);
     const conditions = this.getWhere(where);
+    const sorting = this.getOrderBy(orderBy);
+    const groupByAttr = this.getGroupBy(groupBy);
 
     if (select.length) {
       queryBuilder.select(select);
@@ -812,6 +849,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       queryBuilder.leftJoinAndSelect(property, alias, relationWhere, parameters),
     );
     conditions.forEach((condition) => queryBuilder.andWhere(condition));
+    groupByAttr.forEach((field) => queryBuilder.addGroupBy(field));
 
     // pagination
     if (!this.options.isDisablePagination) {
