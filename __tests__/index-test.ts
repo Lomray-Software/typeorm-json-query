@@ -1,15 +1,16 @@
+import type { IJsonQuery } from '@lomray/microservices-types';
+import {
+  JQFieldType,
+  JQJunction,
+  JQOperator,
+  JQOrder,
+  JQOrderNulls,
+} from '@lomray/microservices-types';
 import { expect } from 'chai';
 import type { Brackets } from 'typeorm';
 import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
-import type { IJsonQuery } from '@src/index';
-import TypeormJsonQuery, {
-  IJsonQueryFieldType,
-  IJsonQueryJunction,
-  IJsonQueryOperator,
-  IJsonQueryOrder,
-  IJsonQueryOrderNulls,
-} from '@src/index';
+import TypeormJsonQuery from '@src/index';
 
 describe('services/typeorm-json-query', () => {
   const repository = TypeormMock.entityManager.getRepository(TestEntity);
@@ -22,7 +23,7 @@ describe('services/typeorm-json-query', () => {
 
   const commonQueryAttributes = ['id'] as IJsonQuery<TestEntity>['attributes'];
   const commonAuthQueryAttributes = ['param'] as IJsonQuery<TestEntity>['attributes'];
-  const commonOrderBy = { id: IJsonQueryOrder.DESC } as IJsonQuery<TestEntity>['orderBy'];
+  const commonOrderBy = { id: JQOrder.DESC } as IJsonQuery<TestEntity>['orderBy'];
   const commonRelations = ['testRelation'] as IJsonQuery<TestEntity>['relations'];
   const defaultPageSize = 25;
 
@@ -221,12 +222,12 @@ describe('services/typeorm-json-query', () => {
     const instance = TypeormJsonQuery.init(
       {
         queryBuilder,
-        query: { orderBy: { id: IJsonQueryOrder.DESC } },
+        query: { orderBy: { id: JQOrder.DESC } },
       },
       { isDisableOrderBy: true },
     );
 
-    expect(instance.getOrderBy({ param: { order: IJsonQueryOrder.ASC } })).to.deep.equal([]);
+    expect(instance.getOrderBy({ param: { order: JQOrder.ASC } })).to.deep.equal([]);
   });
 
   it('should return orderBy with aliases', () => {
@@ -235,7 +236,7 @@ describe('services/typeorm-json-query', () => {
     expect(orderBy).to.deep.equal([
       {
         field: withAlias('id'),
-        value: IJsonQueryOrder.DESC,
+        value: JQOrder.DESC,
         nulls: undefined,
       },
     ]);
@@ -243,19 +244,19 @@ describe('services/typeorm-json-query', () => {
 
   it('should return orderBy with used defined: prevent duplicates & with nullish', () => {
     const orderBy = commonInstance.getOrderBy({
-      id: { order: IJsonQueryOrder.ASC, nulls: IJsonQueryOrderNulls.last },
-      param: { order: IJsonQueryOrder.ASC, nulls: IJsonQueryOrderNulls.first },
+      id: { order: JQOrder.ASC, nulls: JQOrderNulls.last },
+      param: { order: JQOrder.ASC, nulls: JQOrderNulls.first },
     });
 
     expect(orderBy).to.deep.equal([
       {
         field: withAlias('id'),
-        value: IJsonQueryOrder.ASC,
+        value: JQOrder.ASC,
         nulls: 'NULLS LAST',
       },
       {
         field: withAlias('param'),
-        value: IJsonQueryOrder.ASC,
+        value: JQOrder.ASC,
         nulls: 'NULLS FIRST',
       },
     ]);
@@ -267,7 +268,7 @@ describe('services/typeorm-json-query', () => {
       'unknown',
       { order: null },
       { order: 'unknown' },
-      { order: IJsonQueryOrder.DESC, nulls: 'unknown' },
+      { order: JQOrder.DESC, nulls: 'unknown' },
     ];
 
     for (const type of cases) {
@@ -499,7 +500,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should success return where condition with junction operator', () => {
-    const operators = [IJsonQueryJunction.and, IJsonQueryJunction.or];
+    const operators = [JQJunction.and, JQJunction.or];
 
     operators.forEach((operator) => {
       const condition = TypeormJsonQuery.init({ queryBuilder })
@@ -530,7 +531,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should apply where condition: "="', () => {
-    const [result] = emptyInstance.getWhere({ id: { [IJsonQueryOperator.equal]: 1 } });
+    const [result] = emptyInstance.getWhere({ id: { [JQOperator.equal]: 1 } });
 
     expect(bracketToWhere(result)).to.deep.equal([
       '("TestEntity"."id" = :TestEntity.id_1)',
@@ -539,7 +540,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should apply where condition: "!="', () => {
-    const [result] = emptyInstance.getWhere({ id: { [IJsonQueryOperator.notEqual]: 1 } });
+    const [result] = emptyInstance.getWhere({ id: { [JQOperator.notEqual]: 1 } });
 
     expect(bracketToWhere(result)).to.deep.equal([
       '("TestEntity"."id" != :TestEntity.id_1)',
@@ -550,13 +551,13 @@ describe('services/typeorm-json-query', () => {
   it('should throw where condition: "!=" is invalid', () => {
     const result = () =>
       // @ts-ignore
-      runCondition(emptyInstance.getWhere({ id: { [IJsonQueryOperator.notEqual]: {} } }));
+      runCondition(emptyInstance.getWhere({ id: { [JQOperator.notEqual]: {} } }));
 
     expect(result).to.throw('"!=" should be one of');
   });
 
   it('should apply where condition: "like"', () => {
-    const [result] = emptyInstance.getWhere({ id: { [IJsonQueryOperator.like]: '%test$' } });
+    const [result] = emptyInstance.getWhere({ id: { [JQOperator.like]: '%test$' } });
 
     expect(bracketToWhere(result)).to.deep.equal([
       '("TestEntity"."id" LIKE :TestEntity.id_1)',
@@ -566,7 +567,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should apply where condition: "like" insensitive', () => {
     const [result] = emptyInstance.getWhere({
-      id: { [IJsonQueryOperator.like]: '%test$', insensitive: true },
+      id: { [JQOperator.like]: '%test$', insensitive: true },
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
@@ -578,13 +579,13 @@ describe('services/typeorm-json-query', () => {
   it('should throw where condition: "like" is invalid', () => {
     const result = () =>
       // @ts-ignore
-      runCondition(emptyInstance.getWhere({ id: { [IJsonQueryOperator.like]: null } }));
+      runCondition(emptyInstance.getWhere({ id: { [JQOperator.like]: null } }));
 
     expect(result).to.throw('"like" should be string');
   });
 
   it('should apply where condition: "in"', () => {
-    const [result] = emptyInstance.getWhere({ id: { [IJsonQueryOperator.in]: [1, 2] } });
+    const [result] = emptyInstance.getWhere({ id: { [JQOperator.in]: [1, 2] } });
 
     expect(bracketToWhere(result)).to.deep.equal([
       '("TestEntity"."id" IN (:...TestEntity.id_1))',
@@ -593,7 +594,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should apply where condition: "!in"', () => {
-    const [result] = emptyInstance.getWhere({ id: { [IJsonQueryOperator.notIn]: [1, 2] } });
+    const [result] = emptyInstance.getWhere({ id: { [JQOperator.notIn]: [1, 2] } });
 
     expect(bracketToWhere(result)).to.deep.equal([
       '("TestEntity"."id" NOT IN (:...TestEntity.id_1))',
@@ -602,7 +603,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should throw where condition: "in" or "!in" is invalid', () => {
-    for (const operator of [IJsonQueryOperator.in, IJsonQueryOperator.notIn]) {
+    for (const operator of [JQOperator.in, JQOperator.notIn]) {
       const result = () =>
         // @ts-ignore
         runCondition(emptyInstance.getWhere({ id: { [operator]: null } }));
@@ -612,7 +613,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should apply where condition: "between"', () => {
-    const [result] = emptyInstance.getWhere({ id: { [IJsonQueryOperator.between]: [1, 2] } });
+    const [result] = emptyInstance.getWhere({ id: { [JQOperator.between]: [1, 2] } });
 
     expect(bracketToWhere(result)).to.deep.equal([
       '("TestEntity"."id" >= :TestEntity.id_1min AND "TestEntity"."id" <= :TestEntity.id_1max)',
@@ -622,7 +623,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should apply where condition: "between" disable includes', () => {
     const [result] = emptyInstance.getWhere({
-      id: { [IJsonQueryOperator.between]: [1, 2], isIncludes: false },
+      id: { [JQOperator.between]: [1, 2], isIncludes: false },
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
@@ -637,7 +638,7 @@ describe('services/typeorm-json-query', () => {
     for (const type of cases) {
       const result = () =>
         // @ts-ignore
-        runCondition(emptyInstance.getWhere({ id: { [IJsonQueryOperator.between]: type } }));
+        runCondition(emptyInstance.getWhere({ id: { [JQOperator.between]: type } }));
 
       expect(result).to.throw('"between" should have two value');
     }
@@ -645,7 +646,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should apply where condition: "<"', () => {
     const [result] = emptyInstance.getWhere({
-      id: { [IJsonQueryOperator.less]: 1 },
+      id: { [JQOperator.less]: 1 },
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
@@ -656,7 +657,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should apply where condition: "<="', () => {
     const [result] = emptyInstance.getWhere({
-      id: { [IJsonQueryOperator.lessOrEqual]: 1 },
+      id: { [JQOperator.lessOrEqual]: 1 },
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
@@ -667,7 +668,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should apply where condition: ">"', () => {
     const [result] = emptyInstance.getWhere({
-      id: { [IJsonQueryOperator.greater]: 1 },
+      id: { [JQOperator.greater]: 1 },
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
@@ -678,7 +679,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should apply where condition: ">="', () => {
     const [result] = emptyInstance.getWhere({
-      id: { [IJsonQueryOperator.greaterOrEqual]: 1 },
+      id: { [JQOperator.greaterOrEqual]: 1 },
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
@@ -689,7 +690,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should apply where condition: combine ">=" and "<="', () => {
     const [result] = emptyInstance.getWhere({
-      id: { [IJsonQueryOperator.greaterOrEqual]: 2, [IJsonQueryOperator.lessOrEqual]: 1 },
+      id: { [JQOperator.greaterOrEqual]: 2, [JQOperator.lessOrEqual]: 1 },
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
@@ -703,7 +704,7 @@ describe('services/typeorm-json-query', () => {
       runCondition(
         emptyInstance.getWhere({
           // @ts-ignore
-          id: { [IJsonQueryOperator.less]: undefined, [IJsonQueryOperator.greater]: undefined },
+          id: { [JQOperator.less]: undefined, [JQOperator.greater]: undefined },
         }),
       );
 
@@ -715,7 +716,7 @@ describe('services/typeorm-json-query', () => {
       runCondition(
         emptyInstance.getWhere({
           // @ts-ignore
-          id: { [IJsonQueryOperator.less]: {} },
+          id: { [JQOperator.less]: {} },
         }),
       );
 
@@ -724,7 +725,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should apply cast type to field', () => {
     const [result] = emptyInstance.getWhere({
-      id: { [IJsonQueryOperator.like]: '%test%', type: IJsonQueryFieldType.text },
+      id: { [JQOperator.like]: '%test%', type: JQFieldType.text },
     });
 
     expect(bracketToWhere(result)).to.deep.equal([
@@ -738,7 +739,7 @@ describe('services/typeorm-json-query', () => {
       runCondition(
         emptyInstance.getWhere({
           // @ts-ignore
-          id: { [IJsonQueryOperator.like]: '%test%', type: 'invalid' },
+          id: { [JQOperator.like]: '%test%', type: 'invalid' },
         }),
       );
 
@@ -748,7 +749,7 @@ describe('services/typeorm-json-query', () => {
   it('should return right query', () => {
     const qbResult = TypeormJsonQuery.init({
       queryBuilder,
-      query: { where: { id: 1 }, orderBy: { id: IJsonQueryOrder.ASC }, groupBy: ['id'] },
+      query: { where: { id: 1 }, orderBy: { id: JQOrder.ASC }, groupBy: ['id'] },
       authQuery: { where: { param: 'auth' } },
     })
       .toQuery()
@@ -767,7 +768,7 @@ describe('services/typeorm-json-query', () => {
       },
       { isDisablePagination: true },
     )
-      .toQuery({ orderBy: { id: IJsonQueryOrder.DESC } })
+      .toQuery({ orderBy: { id: JQOrder.DESC } })
       .getQuery();
 
     expect(qbResult).to.equal(

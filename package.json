@@ -36,6 +36,9 @@
 		"ts:check": "tsc --project ./tsconfig.json --skipLibCheck --noemit",
 		"prepare": "husky install"
 	},
+  "dependencies": {
+    "@lomray/microservices-types": "^1.1.0"
+  },
 	"devDependencies": {
 		"@commitlint/cli": "^17.0.3",
 		"@commitlint/config-conventional": "^17.0.3",

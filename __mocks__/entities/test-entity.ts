@@ -1,5 +1,5 @@
+import { CEntity } from '@lomray/microservices-types';
 import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
-import { CEntity } from '@src/index';
 import TestRelatedEntity from './test-related-entity';
 
 @Entity()

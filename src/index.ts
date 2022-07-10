@@ -1,207 +1,19 @@
+import type {
+  IJsonQuery,
+  ObjectLiteral,
+  IJsonQueryOrderField,
+  TFilterCondition,
+  IJsonQueryWhere,
+} from '@lomray/microservices-types';
+import {
+  JQOrder,
+  JQOperator,
+  JQOrderNulls,
+  JQFieldType,
+  JQJunction,
+} from '@lomray/microservices-types';
 import type { WhereExpressionBuilder, SelectQueryBuilder } from 'typeorm';
 import { Brackets } from 'typeorm';
-
-/**
- * Extends entity interface from this interface
- */
-export interface IEntity {
-  isEntity?: never;
-}
-
-/**
- * Extends entity class from this class
- */
-export class CEntity implements IEntity {
-  isEntity?: never;
-}
-
-type Without<T, TU> = {
-  [P in Exclude<keyof T, keyof TU>]?: never;
-};
-
-type XOR<T, TU> = T | TU extends Record<string, any>
-  ? (Without<T, TU> & TU) | (Without<TU, T> & T)
-  : T | TU;
-
-export type ToObject<T> = T extends readonly any[] ? T[0] : T;
-
-export type ObjectLiteral = Record<string | symbol | number, any>;
-
-export enum IJsonQueryOrder {
-  ASC = 'ASC',
-  DESC = 'DESC',
-}
-
-export enum IJsonQueryOrderNulls {
-  first = 'first',
-  last = 'last',
-}
-
-export enum IJsonQueryFieldType {
-  text = 'text',
-}
-
-export enum IJsonQueryOperator {
-  between = 'between',
-  like = 'like',
-  in = 'in',
-  notIn = '!in',
-  notEqual = '!=',
-  equal = '=',
-  greater = '>',
-  greaterOrEqual = '>=',
-  less = '<',
-  lessOrEqual = '<=',
-}
-
-export enum IJsonQueryJunction {
-  and = 'and',
-  or = 'or',
-}
-
-export interface IJsonQueryRelation<TEntity = ObjectLiteral, TN = TEntityRelations<TEntity>> {
-  name: TN;
-  // @ts-ignore
-  where?: IJsonQueryWhere<Pick<TEntity, TN>>;
-}
-
-type CurryXOR<T, TR extends unknown[]> = {
-  0: [T];
-  1: TR extends readonly [infer U, ...infer V] ? [...CurryXOR<XOR<T, U>, V>] : never;
-}[TR extends readonly [infer _, ...infer __] ? 1 : 0];
-
-type XOR_MULTIPLE<TR extends unknown[]> = {
-  0: TR extends readonly [infer U] ? U : never;
-  1: TR extends readonly [infer U, ...infer V] ? CurryXOR<U, V>[0] : never;
-}[TR extends readonly [infer _, ...infer __] ? 1 : 0];
-
-export type NonEmptyArray<T> = [T, ...T[]];
-
-export type FilterValue = string | number | null;
-
-export type FilterOptions = { type?: IJsonQueryFieldType };
-
-export type FilterLess = { [IJsonQueryOperator.less]: FilterValue } & FilterOptions;
-
-export type FilterLessOrEqual = { [IJsonQueryOperator.lessOrEqual]: FilterValue } & FilterOptions;
-
-export type FilterGreater = { [IJsonQueryOperator.greater]: FilterValue } & FilterOptions;
-
-export type FilterGreaterOrEqual = {
-  [IJsonQueryOperator.greaterOrEqual]: FilterValue;
-} & FilterOptions;
-
-export type FilterCondition = XOR_MULTIPLE<
-  [
-    {
-      [IJsonQueryOperator.equal]: FilterValue;
-    } & FilterOptions,
-    {
-      [IJsonQueryOperator.notEqual]: FilterValue;
-    } & FilterOptions,
-    {
-      [IJsonQueryOperator.between]: [FilterValue, FilterValue];
-      isIncludes?: boolean;
-    } & FilterOptions,
-    {
-      [IJsonQueryOperator.like]: string;
-      insensitive?: boolean;
-    } & FilterOptions,
-    {
-      [IJsonQueryOperator.in]: NonEmptyArray<FilterValue>;
-    } & FilterOptions,
-    {
-      [IJsonQueryOperator.notIn]: NonEmptyArray<FilterValue>;
-    } & FilterOptions,
-    XOR_MULTIPLE<
-      [
-        FilterLess,
-        FilterLessOrEqual,
-        FilterGreater,
-        FilterGreaterOrEqual,
-        XOR<FilterLess, FilterLessOrEqual> & XOR<FilterGreater, FilterGreaterOrEqual>,
-      ]
-    >,
-  ]
->;
-
-export type WithRelationFields<
-  TE extends ObjectLiteral,
-  TP extends string | number | symbol,
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  TExistKeys = {},
-> = ToObject<TE[TP]> extends IEntity
-  ? TExistKeys extends { [key in TP]: any } // avoid infinite recursion
-    ? never
-    : keyof {
-        // @ts-ignore
-        // eslint-disable-next-line prettier/prettier
-        [PF in keyof Omit<ToObject<TE[TP]>, keyof IEntity> as `${TP}.${WithRelationFields<
-          ToObject<TE[TP]>,
-          PF,
-          { [key in TP | keyof TExistKeys]: any }
-        >}`]: string;
-      } // return relation fields
-  : TP; // or return entity field
-
-export type WithRelations<
-  TE extends ObjectLiteral,
-  TP extends string | number | symbol,
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  TExistKeys = {},
-> = ToObject<TE[TP]> extends IEntity
-  ? TExistKeys extends { [key in TP]: any } // avoid infinite recursion
-    ? never
-    : keyof {
-        // eslint-disable-next-line prettier/prettier
-        [PF in keyof ToObject<TE[TP]> as
-        // @ts-ignore
-        | `${TP}.${WithRelations<ToObject<TE[TP]>, PF, { [key in TP | keyof TExistKeys]: any }>}`
-          | TP]: any;
-      }
-  : never;
-
-export type TEntityRelations<TEntity> = keyof {
-  [P in keyof TEntity as WithRelations<TEntity, P>]: any;
-};
-
-// Get entity keys and keys with relations
-export type TEntityFields<TEntity> = keyof Omit<
-  {
-    [P in keyof TEntity as WithRelationFields<TEntity, P>]: any;
-  },
-  keyof IEntity
->;
-
-export type TFieldCondition = string | number | null | FilterCondition;
-
-export type FilterFields<TEntity = ObjectLiteral> = {
-  [field in TEntityFields<TEntity>]?: TFieldCondition;
-};
-
-export type IJsonQueryWhere<TEntity = ObjectLiteral> =
-  | {
-      [IJsonQueryJunction.and]?: NonEmptyArray<IJsonQueryWhere<TEntity>>;
-      [IJsonQueryJunction.or]?: NonEmptyArray<IJsonQueryWhere<TEntity>>;
-    }
-  | FilterFields<TEntity>;
-
-export type IJsonQueryOrderField = {
-  order: keyof typeof IJsonQueryOrder;
-  nulls?: keyof typeof IJsonQueryOrderNulls;
-};
-
-export interface IJsonQuery<TEntity = ObjectLiteral> {
-  attributes?: TEntityFields<TEntity>[];
-  relations?: (TEntityRelations<TEntity> | IJsonQueryRelation<TEntity>)[];
-  where?: IJsonQueryWhere<TEntity>;
-  orderBy?: {
-    [field in TEntityFields<TEntity>]?: keyof typeof IJsonQueryOrder | IJsonQueryOrderField;
-  };
-  groupBy?: TEntityFields<TEntity>[];
-  page?: number;
-  pageSize?: number;
-}
 
 export interface IJsonQueryAuth<TEntity = ObjectLiteral>
   extends Omit<IJsonQuery<TEntity>, 'orderBy' | 'page' | 'pageSize' | 'relations'> {
@@ -234,7 +46,7 @@ export interface ITypeormJsonQueryOptions {
 
 export interface IJsonOrderByResult {
   field: string;
-  value: IJsonQueryOrder;
+  value: JQOrder;
   nulls: 'NULLS FIRST' | 'NULLS LAST';
 }
 
@@ -413,18 +225,18 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
           typeof sort === 'object' && sort !== null ? sort : { order: sort }
         ) as IJsonQueryOrderField;
 
-        if (!order || !(order in IJsonQueryOrder) || (nulls && !(nulls in IJsonQueryOrderNulls))) {
+        if (!order || !(order in JQOrder) || (nulls && !(nulls in JQOrderNulls))) {
           throw new Error(`Invalid json query: (${field}) should have valid sort value.`);
         }
 
         let nullsOperator;
 
         switch (nulls) {
-          case IJsonQueryOrderNulls.first:
+          case JQOrderNulls.first:
             nullsOperator = 'NULLS FIRST';
             break;
 
-          case IJsonQueryOrderNulls.last:
+          case JQOrderNulls.last:
             nullsOperator = 'NULLS LAST';
         }
 
@@ -580,14 +392,14 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * Apply cast to field
    * @private
    */
-  private static getCastField(field: string, options: FilterCondition): string {
+  private static getCastField(field: string, options: TFilterCondition): string {
     if (typeof options !== 'object' || options === null || !options?.type) {
       return field;
     }
 
     const { type } = options;
 
-    if (!(type in IJsonQueryFieldType)) {
+    if (!(type in JQFieldType)) {
       throw new Error(`Invalid json query: field type cast "${type}" is invalid.`);
     }
 
@@ -601,7 +413,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   private applyCondition(
     qb: WhereExpressionBuilder,
     field: string,
-    condition: FilterCondition,
+    condition: TFilterCondition,
   ): void {
     if (condition === undefined) {
       throw new Error(`Invalid json query: (${field}) should have value or condition.`);
@@ -614,9 +426,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     if (
       ['number', 'string'].includes(typeof condition) ||
       condition === null ||
-      condition.hasOwnProperty(IJsonQueryOperator.equal)
+      condition.hasOwnProperty(JQOperator.equal)
     ) {
-      const value = condition?.[IJsonQueryOperator.equal] ?? condition;
+      const value = condition?.[JQOperator.equal] ?? condition;
 
       qb.andWhere(`${castField} = :${parameter}`, {
         [parameter]: value,
@@ -626,8 +438,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     // not equal
-    if (condition.hasOwnProperty(IJsonQueryOperator.notEqual)) {
-      const value = condition[IJsonQueryOperator.notEqual];
+    if (condition.hasOwnProperty(JQOperator.notEqual)) {
+      const value = condition[JQOperator.notEqual];
 
       // validation
       if (!['string', 'number'].includes(typeof value) && value !== null) {
@@ -644,8 +456,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     // like
-    if (condition.hasOwnProperty(IJsonQueryOperator.like)) {
-      const value = condition[IJsonQueryOperator.like];
+    if (condition.hasOwnProperty(JQOperator.like)) {
+      const value = condition[JQOperator.like];
 
       // validation
       if (typeof value !== 'string') {
@@ -662,12 +474,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     // in OR not in
-    if (
-      condition.hasOwnProperty(IJsonQueryOperator.in) ||
-      condition.hasOwnProperty(IJsonQueryOperator.notIn)
-    ) {
-      const value = condition[IJsonQueryOperator.in] ?? condition[IJsonQueryOperator.notIn];
-      const isNot = condition.hasOwnProperty(IJsonQueryOperator.notIn) ? ' NOT' : '';
+    if (condition.hasOwnProperty(JQOperator.in) || condition.hasOwnProperty(JQOperator.notIn)) {
+      const value = condition[JQOperator.in] ?? condition[JQOperator.notIn];
+      const isNot = condition.hasOwnProperty(JQOperator.notIn) ? ' NOT' : '';
 
       // validation
       if (!Array.isArray(value)) {
@@ -683,21 +492,18 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
     // comparison
     if (
-      [
-        IJsonQueryOperator.less,
-        IJsonQueryOperator.lessOrEqual,
-        IJsonQueryOperator.greater,
-        IJsonQueryOperator.greaterOrEqual,
-      ].some((property) => condition.hasOwnProperty(property))
+      [JQOperator.less, JQOperator.lessOrEqual, JQOperator.greater, JQOperator.greaterOrEqual].some(
+        (property) => condition.hasOwnProperty(property),
+      )
     ) {
       const less =
-        condition[IJsonQueryOperator.less] !== undefined
-          ? { value: condition[IJsonQueryOperator.less], operator: '<' }
-          : { value: condition[IJsonQueryOperator.lessOrEqual], operator: '<=' };
+        condition[JQOperator.less] !== undefined
+          ? { value: condition[JQOperator.less], operator: '<' }
+          : { value: condition[JQOperator.lessOrEqual], operator: '<=' };
       const greater =
-        condition[IJsonQueryOperator.greater] !== undefined
-          ? { value: condition[IJsonQueryOperator.greater], operator: '>' }
-          : { value: condition[IJsonQueryOperator.greaterOrEqual], operator: '>=' };
+        condition[JQOperator.greater] !== undefined
+          ? { value: condition[JQOperator.greater], operator: '>' }
+          : { value: condition[JQOperator.greaterOrEqual], operator: '>=' };
 
       // validation
       if (less.value === undefined && greater.value === undefined) {
@@ -732,8 +538,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     // between
-    if (condition.hasOwnProperty(IJsonQueryOperator.between)) {
-      const values = condition[IJsonQueryOperator.between];
+    if (condition.hasOwnProperty(JQOperator.between)) {
+      const values = condition[JQOperator.between];
       // strict = true by default
       const isIncludes =
         ((typeof condition.isIncludes === 'boolean' ? condition.isIncludes : true) && '=') || '';
@@ -781,8 +587,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
     Object.entries(condition).forEach(([field, value]) => {
       switch (field) {
-        case IJsonQueryJunction.or:
-        case IJsonQueryJunction.and:
+        case JQJunction.or:
+        case JQJunction.and:
           if (!Array.isArray(value)) {
             throw new Error(`Invalid json query: "${field}" should be array.`);
           }
@@ -795,7 +601,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
               );
 
               // join
-              if (field === IJsonQueryJunction.and) {
+              if (field === JQJunction.and) {
                 nestedQb.andWhere(elementCondition);
               } else {
                 nestedQb.orWhere(elementCondition);
