@@ -428,9 +428,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       condition === null ||
       condition.hasOwnProperty(JQOperator.equal)
     ) {
-      const value = condition.hasOwnProperty(JQOperator.equal)
-        ? condition[JQOperator.equal]
-        : condition;
+      // @ts-ignore
+      const value = condition?.[JQOperator.equal] ?? condition;
 
       qb.andWhere(`${castField} = :${parameter}`, {
         [parameter]: value,
