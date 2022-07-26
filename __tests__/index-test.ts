@@ -723,6 +723,22 @@ describe('services/typeorm-json-query', () => {
     expect(result).to.throw('comparison invalid value');
   });
 
+  it('should apply where condition: "IS NULL"', () => {
+    const [result] = emptyInstance.getWhere({
+      id: { [JQOperator.isNULL]: null },
+    });
+
+    expect(bracketToWhere(result)).to.deep.equal(['("TestEntity"."id" IS NULL)', {}]);
+  });
+
+  it('should apply where condition: "IS NOT NULL"', () => {
+    const [result] = emptyInstance.getWhere({
+      id: { [JQOperator.isNotNULL]: null },
+    });
+
+    expect(bracketToWhere(result)).to.deep.equal(['("TestEntity"."id" IS NOT NULL)', {}]);
+  });
+
   it('should apply cast type to field', () => {
     const [result] = emptyInstance.getWhere({
       id: { [JQOperator.like]: '%test%', type: JQFieldType.text },

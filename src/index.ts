@@ -393,7 +393,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * @private
    */
   private static getCastField(field: string, options: TFilterCondition): string {
-    if (typeof options !== 'object' || options === null || !options?.type) {
+    if (typeof options !== 'object' || options === null || !options.type) {
       return field;
     }
 
@@ -428,7 +428,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       condition === null ||
       condition.hasOwnProperty(JQOperator.equal)
     ) {
-      const value = condition?.[JQOperator.equal] ?? condition;
+      const value = condition.hasOwnProperty(JQOperator.equal)
+        ? condition[JQOperator.equal]
+        : condition;
 
       qb.andWhere(`${castField} = :${parameter}`, {
         [parameter]: value,
@@ -455,6 +457,18 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       return;
     }
 
+    // is null or not is null
+    if (
+      condition.hasOwnProperty(JQOperator.isNULL) ||
+      condition.hasOwnProperty(JQOperator.isNotNULL)
+    ) {
+      const value = `IS${condition.hasOwnProperty(JQOperator.isNotNULL) ? ' NOT' : ''} NULL`;
+
+      qb.andWhere(`${castField} ${value}`);
+
+      return;
+    }
+
     // like
     if (condition.hasOwnProperty(JQOperator.like)) {
       const value = condition[JQOperator.like];
@@ -464,7 +478,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         throw new Error(`Invalid json query: (${field}) "like" should be string.`);
       }
 
-      const operator = condition?.insensitive ? 'ILIKE' : 'LIKE';
+      const operator = condition.insensitive ? 'ILIKE' : 'LIKE';
 
       qb.andWhere(`${castField} ${operator} :${parameter}`, {
         [parameter]: value,
