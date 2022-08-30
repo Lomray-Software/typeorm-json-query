@@ -16,5 +16,5 @@ export default {
       }),
     }),
   ],
-  external: ['typeorm'],
+  external: ['typeorm', '@lomray/microservices-types'],
 };

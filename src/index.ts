@@ -20,6 +20,7 @@ export interface IJsonQueryAuth<TEntity = ObjectLiteral>
   maxPageSize?: number;
   maxDeepRelation?: number;
   maxDeepWhere?: number;
+  defaultRelationMaxPageSize?: number;
   isDisableRelations?: boolean;
   isDisableAttributes?: boolean;
   isDisableOrderBy?: boolean;
@@ -37,11 +38,14 @@ export interface ITypeormJsonQueryOptions {
   maxPageSize: number; // 0 - disable (query all items), 200 - default value
   maxDeepRelation: number; // level1.level2.level3.etc...
   maxDeepWhere: number; // { and: [{ and: [{ and: [] }]}] } deep condition level
+  defaultRelationPageSize: number;
+  defaultRelationMaxPageSize: number;
   isDisableRelations?: boolean;
   isDisableAttributes?: boolean;
   isDisableOrderBy?: boolean;
   isDisableGroupBy?: boolean;
   isDisablePagination?: boolean;
+  isLateralJoins?: boolean; // support lateral joins, conditions, pagination, sorting for relations (only postgres)
 }
 
 export interface IJsonOrderByResult {
@@ -55,6 +59,7 @@ export interface IJsonRelationResult {
   alias: string;
   where?: string;
   parameters?: Record<string, any>;
+  query?: Pick<IJsonQuery, 'page' | 'pageSize' | 'orderBy' | 'groupBy'>;
 }
 
 // noinspection SuspiciousTypeOfGuard
@@ -70,7 +75,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   /**
    * Request json query
    */
-  private query: IJsonQuery<TEntity>;
+  private readonly query: IJsonQuery<TEntity>;
 
   /**
    * Authorization query
@@ -85,11 +90,14 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     maxPageSize: 100,
     maxDeepRelation: 4,
     maxDeepWhere: 5,
+    defaultRelationPageSize: 50,
+    defaultRelationMaxPageSize: 100,
     isDisableAttributes: false,
     isDisableRelations: false,
     isDisableOrderBy: false,
     isDisableGroupBy: false,
     isDisablePagination: false,
+    isLateralJoins: true,
   };
 
   /**
@@ -282,8 +290,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   /**
    * Get current page
    */
-  public getPage(page?: number): number {
-    return ((page || this.query.page || 1) - 1) * this.getPageSize();
+  public getPage(page?: number, pageSize?: number): number {
+    return ((page || 1) - 1) * this.getPageSize(pageSize);
   }
 
   /**
@@ -292,7 +300,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   public getPageSize(size?: number): number {
     const { maxPageSize, defaultPageSize } = this.options;
 
-    const currentPageSize = size ?? this.query.pageSize ?? defaultPageSize;
+    const currentPageSize = size ?? defaultPageSize;
 
     // Disable page size (you can get all rows), or deny disable page size
     if (currentPageSize === 0) {
@@ -314,10 +322,17 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     return [...new Set([...(this.query.relations ?? []), ...(relations ?? [])])].map((relation) => {
-      const { name, where } =
+      const { name, where, page, pageSize, orderBy, groupBy } =
         typeof relation === 'object' && relation !== null
           ? relation
-          : { name: relation, where: null };
+          : {
+              name: relation,
+              where: null,
+              page: undefined,
+              pageSize: undefined,
+              orderBy: undefined,
+              groupBy: undefined,
+            };
 
       if (!name || typeof name !== 'string') {
         throw new Error('Invalid json query: some relation has incorrect name.');
@@ -345,6 +360,12 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         alias,
         where: whereCondition,
         parameters: whereParameters,
+        query: {
+          page,
+          pageSize,
+          orderBy,
+          groupBy,
+        },
       };
     });
   }
@@ -404,6 +425,68 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     return `${TypeormJsonQuery.quoteColumn(field)}::${type}`;
+  }
+
+  /**
+   * Enable lateral joins
+   * @private
+   */
+  private enableLateralJoins(
+    qb: SelectQueryBuilder<TEntity>,
+    relations: IJsonRelationResult[],
+  ): void {
+    const { defaultRelationPageSize, defaultRelationMaxPageSize } = this.options;
+    const defaultCreateJoinExpression = qb['createJoinExpression'].bind(qb);
+    const relationsByAlias = relations.reduce(
+      (res, relation) => ({
+        ...res,
+        [relation.alias]: relation,
+      }),
+      {},
+    ) as { [alias: string]: IJsonRelationResult };
+
+    qb['createJoinExpression'] = () => {
+      let join = defaultCreateJoinExpression();
+
+      qb.expressionMap.joinAttributes.forEach(({ tablePath, alias }) => {
+        const aliasName = alias.name;
+        const joinRegex = new RegExp(
+          `LEFT JOIN "${tablePath}" "${aliasName}" ON (.*?)(\\s(JOIN|LEFT|INNER|RIGHT)|$)`,
+        );
+        const parts = join.match(joinRegex);
+
+        if (Array.isArray(parts) && parts.length > 1) {
+          const [joinStr, joinCond, nextJoin] = parts as string[];
+          const { query } = relationsByAlias[aliasName] ?? {};
+
+          // create sql for order, group by and pagination
+          const queryBuilder: SelectQueryBuilder<ObjectLiteral> = this.queryBuilder.connection
+            .createQueryBuilder()
+            .from(tablePath, 'never');
+          const [, extraCond] = TypeormJsonQuery.init<ObjectLiteral>(
+            {
+              queryBuilder,
+              query,
+            },
+            { defaultPageSize: defaultRelationPageSize, maxPageSize: defaultRelationMaxPageSize },
+          )
+            .toQuery()
+            .getSql()
+            .split(' "never" ');
+
+          // build lateral join
+          const foundedJoin = joinStr.replace(nextJoin, '');
+          const foundedCond = joinCond.replace(new RegExp(`"${aliasName}"\\.`, 'g'), '');
+          const foundedExtraArgs = extraCond.replace(/"never"\./g, '');
+          const lateralJoin = `LEFT JOIN LATERAL (SELECT * FROM "${tablePath}" WHERE ${foundedCond} ${foundedExtraArgs}) "${aliasName}" ON TRUE`;
+
+          // replace original left join with lateral join
+          join = join.replace(foundedJoin, lateralJoin);
+        }
+      });
+
+      return join;
+    };
   }
 
   /**
@@ -645,16 +728,19 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    */
   public toQuery({
     attributes,
-    relations,
+    relations: extraRelations,
     where,
     orderBy,
     groupBy,
     page,
     pageSize,
   }: IJsonQuery<TEntity> = {}): ITypeormJsonQueryArgs<TEntity>['queryBuilder'] {
+    const { isDisablePagination, isLateralJoins } = this.options;
+    const { page: queryPage, pageSize: queryPageSize } = this.query;
+
     const queryBuilder = this.queryBuilder.clone();
     const select = this.getAttributes(attributes);
-    const includes = this.getRelations(relations);
+    const relations = this.getRelations(extraRelations);
     const conditions = this.getWhere(where);
     const sorting = this.getOrderBy(orderBy);
     const groupByAttr = this.getGroupBy(groupBy);
@@ -664,16 +750,21 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     sorting.forEach(({ field, value, nulls }) => queryBuilder.addOrderBy(field, value, nulls));
-    includes.forEach(({ property, alias, where: relationWhere, parameters }) =>
+    relations.forEach(({ property, alias, where: relationWhere, parameters }) =>
       queryBuilder.leftJoinAndSelect(property, alias, relationWhere, parameters),
     );
     conditions.forEach((condition) => queryBuilder.andWhere(condition));
     groupByAttr.forEach((field) => queryBuilder.addGroupBy(field));
 
     // pagination
-    if (!this.options.isDisablePagination) {
-      queryBuilder.take(this.getPageSize(pageSize));
-      queryBuilder.skip(this.getPage(page));
+    if (!isDisablePagination) {
+      queryBuilder.take(this.getPageSize(pageSize || queryPageSize));
+      queryBuilder.skip(this.getPage(page || queryPage));
+    }
+
+    // lateral joins
+    if (isLateralJoins) {
+      this.enableLateralJoins(queryBuilder, relations);
     }
 
     return queryBuilder;

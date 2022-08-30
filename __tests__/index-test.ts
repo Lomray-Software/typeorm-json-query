@@ -26,6 +26,14 @@ describe('services/typeorm-json-query', () => {
   const commonOrderBy = { id: JQOrder.DESC } as IJsonQuery<TestEntity>['orderBy'];
   const commonRelations = ['testRelation'] as IJsonQuery<TestEntity>['relations'];
   const defaultPageSize = 25;
+  const defaultRelationQuery = {
+    query: {
+      groupBy: undefined,
+      orderBy: undefined,
+      page: undefined,
+      pageSize: undefined,
+    },
+  };
 
   const commonInstance = TypeormJsonQuery.init({
     queryBuilder,
@@ -294,9 +302,9 @@ describe('services/typeorm-json-query', () => {
 
   it('should return query defined page', () => {
     const instance = TypeormJsonQuery.init({ queryBuilder, query: { page: 2 } });
-    const page = instance.getPage();
+    const page = instance.toQuery().getSql();
 
-    expect(page).to.equal(defaultPageSize);
+    expect(page.endsWith('LIMIT 25 OFFSET 25')).to.true;
   });
 
   it('should return default page size', () => {
@@ -323,9 +331,9 @@ describe('services/typeorm-json-query', () => {
 
   it('should return query page size', () => {
     const instance = TypeormJsonQuery.init({ queryBuilder, query: { pageSize: 10 } });
-    const pageSize = instance.getPageSize();
+    const pageSize = instance.toQuery().getSql();
 
-    expect(pageSize).to.equal(10);
+    expect(pageSize.endsWith('LIMIT 10')).to.true;
   });
 
   it('should return max page size', () => {
@@ -389,6 +397,7 @@ describe('services/typeorm-json-query', () => {
         alias: commonRelations?.[0],
         where: undefined,
         parameters: undefined,
+        ...defaultRelationQuery,
       },
     ]);
   });
@@ -404,6 +413,7 @@ describe('services/typeorm-json-query', () => {
         alias: commonRelations?.[0],
         where: 'testRelation.id = :testRelation.id_1',
         parameters: { 'testRelation.id_1': 1 },
+        ...defaultRelationQuery,
       },
     ]);
   });
@@ -422,6 +432,7 @@ describe('services/typeorm-json-query', () => {
         },
         property: 'TestEntity.rel1',
         where: 'rel1.id = :rel1.id_1',
+        ...defaultRelationQuery,
       },
       {
         alias: 'rel1_rel2',
@@ -430,6 +441,7 @@ describe('services/typeorm-json-query', () => {
         },
         property: 'rel1.rel2',
         where: 'rel1_rel2.id = :rel1_rel2.id_2',
+        ...defaultRelationQuery,
       },
     ]);
   });
@@ -780,7 +792,10 @@ describe('services/typeorm-json-query', () => {
     const qbResult = TypeormJsonQuery.init(
       {
         queryBuilder,
-        query: { attributes: ['id'], relations: ['testRelation'] },
+        query: {
+          attributes: ['id'],
+          relations: [{ name: 'testRelation', orderBy: { id: 'DESC' } }],
+        },
       },
       { isDisablePagination: true },
     )
@@ -788,7 +803,25 @@ describe('services/typeorm-json-query', () => {
       .getQuery();
 
     expect(qbResult).to.equal(
-      'SELECT "TestEntity"."id" AS "TestEntity_id", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId" ORDER BY "TestEntity"."id" DESC',
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN LATERAL (SELECT * FROM "test_related_entity" WHERE "id"="TestEntity"."testRelationId" ORDER BY "id" DESC LIMIT 50) "testRelation" ON TRUE ORDER BY "TestEntity"."id" DESC',
+    );
+  });
+
+  it('should return right sql query with disabled lateral joins', () => {
+    const qbResult = TypeormJsonQuery.init(
+      {
+        queryBuilder,
+        query: {
+          relations: [{ name: 'testRelation', orderBy: { id: 'DESC' } }],
+        },
+      },
+      { isLateralJoins: false },
+    )
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId"',
     );
   });
 });
