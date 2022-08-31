@@ -33,6 +33,7 @@ describe('services/typeorm-json-query', () => {
       page: undefined,
       pageSize: undefined,
     },
+    isLateral: false,
   };
 
   const commonInstance = TypeormJsonQuery.init({
@@ -803,7 +804,7 @@ describe('services/typeorm-json-query', () => {
       .getQuery();
 
     expect(qbResult).to.equal(
-      'SELECT "TestEntity"."id" AS "TestEntity_id", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN LATERAL (SELECT * FROM "test_related_entity" WHERE "id"="TestEntity"."testRelationId" ORDER BY "id" DESC LIMIT 50) "testRelation" ON TRUE ORDER BY "TestEntity"."id" DESC',
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId" ORDER BY "TestEntity"."id" DESC',
     );
   });
 
@@ -812,7 +813,7 @@ describe('services/typeorm-json-query', () => {
       {
         queryBuilder,
         query: {
-          relations: [{ name: 'testRelation', orderBy: { id: 'DESC' } }],
+          relations: [{ name: 'testRelation', orderBy: { id: 'DESC' }, isLateral: true }],
         },
       },
       { isLateralJoins: false },
@@ -829,7 +830,7 @@ describe('services/typeorm-json-query', () => {
     const qbResult = TypeormJsonQuery.init({
       queryBuilder,
       query: {
-        relations: [{ name: 'testRelation', orderBy: { id: 'DESC' } }],
+        relations: [{ name: 'testRelation', orderBy: { id: 'DESC' }, isLateral: true }],
       },
     })
       .toQuery()
@@ -838,6 +839,24 @@ describe('services/typeorm-json-query', () => {
 
     expect(qbResult).to.equal(
       'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN LATERAL (SELECT * FROM "test_related_entity" WHERE "id"="TestEntity"."testRelationId" ORDER BY "id" DESC LIMIT 50) "testRelation" ON TRUE',
+    );
+  });
+
+  it('should return right sql query without lateral joins if it join alias contains in where clause', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: {
+        relations: [{ name: 'testRelation', orderBy: { id: 'DESC' }, isLateral: true }],
+        where: {
+          'testRelation.id': 1,
+        },
+      },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId" WHERE ("testRelation"."id" = :testRelation.id_1)',
     );
   });
 });

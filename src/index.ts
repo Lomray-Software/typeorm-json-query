@@ -59,7 +59,8 @@ export interface IJsonRelationResult {
   alias: string;
   where?: string;
   parameters?: Record<string, any>;
-  query?: Pick<IJsonQuery, 'page' | 'pageSize' | 'orderBy' | 'groupBy'>;
+  query: Pick<IJsonQuery, 'page' | 'pageSize' | 'orderBy' | 'groupBy'>;
+  isLateral: boolean;
 }
 
 // noinspection SuspiciousTypeOfGuard
@@ -322,17 +323,25 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     return [...new Set([...(this.query.relations ?? []), ...(relations ?? [])])].map((relation) => {
-      const { name, where, page, pageSize, orderBy, groupBy } =
-        typeof relation === 'object' && relation !== null
-          ? relation
-          : {
-              name: relation,
-              where: null,
-              page: undefined,
-              pageSize: undefined,
-              orderBy: undefined,
-              groupBy: undefined,
-            };
+      const {
+        name,
+        where,
+        page,
+        pageSize,
+        orderBy,
+        groupBy,
+        isLateral = false,
+      } = typeof relation === 'object' && relation !== null
+        ? relation
+        : {
+            name: relation,
+            where: null,
+            page: undefined,
+            pageSize: undefined,
+            orderBy: undefined,
+            groupBy: undefined,
+            isLateral: false,
+          };
 
       if (!name || typeof name !== 'string') {
         throw new Error('Invalid json query: some relation has incorrect name.');
@@ -350,6 +359,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         const relationWhere = this.queryBuilder.connection
           .createQueryBuilder()
           .from(name, alias)
+          .withDeleted() // we don't care about this (prevent duplicate)
           .where((qb) => this.parseCondition(where, qb, alias));
 
         [whereCondition, whereParameters] = TypeormJsonQuery.qbWhereParse(relationWhere);
@@ -360,6 +370,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         alias,
         where: whereCondition,
         parameters: whereParameters,
+        isLateral,
         query: {
           page,
           pageSize,
@@ -435,42 +446,59 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   private createJoinExpression(this: SelectQueryBuilder<TEntity>) {
     const { defaultRelationPageSize, defaultRelationMaxPageSize } = this['jsonQueryOptions'];
     let join = this['defaultCreateJoinExpression']();
+    const whereExpression = this['createWhereExpression']();
 
     this.expressionMap.joinAttributes.forEach(({ tablePath, alias }) => {
       const aliasName = alias.name;
+      const detectAliasRegexp = new RegExp(`"${aliasName}"\\.`, 'g');
+      const { query, isLateral } = (this['relationsByAlias'][aliasName] ??
+        {}) as IJsonRelationResult;
+
+      if (!isLateral) {
+        return;
+      }
+
+      // skip if query where has some fields from current join (performance issues)
+      if (detectAliasRegexp.test(whereExpression)) {
+        return;
+      }
+
       const joinRegex = new RegExp(
         `LEFT JOIN "${tablePath}" "${aliasName}" ON (.*?)(\\s(JOIN|LEFT|INNER|RIGHT)|$)`,
       );
       const parts = join.match(joinRegex);
 
-      if (Array.isArray(parts) && parts.length > 1) {
-        const [joinStr, joinCond, nextJoin] = parts as string[];
-        const { query } = this['relationsByAlias'][aliasName] ?? {};
-
-        // create sql for order, group by and pagination
-        const queryBuilder: SelectQueryBuilder<ObjectLiteral> = this.connection
-          .createQueryBuilder()
-          .from(tablePath, 'never');
-        const [, extraCond] = TypeormJsonQuery.init<ObjectLiteral>(
-          {
-            queryBuilder,
-            query,
-          },
-          { defaultPageSize: defaultRelationPageSize, maxPageSize: defaultRelationMaxPageSize },
-        )
-          .toQuery()
-          .getSql()
-          .split(' "never" ');
-
-        // build lateral join
-        const foundedJoin = joinStr.replace(nextJoin, '');
-        const foundedCond = joinCond.replace(new RegExp(`"${aliasName}"\\.`, 'g'), '');
-        const foundedExtraArgs = extraCond.replace(/"never"\./g, '');
-        const lateralJoin = `LEFT JOIN LATERAL (SELECT * FROM "${tablePath}" WHERE ${foundedCond} ${foundedExtraArgs}) "${aliasName}" ON TRUE`;
-
-        // replace original left join with lateral join
-        join = join.replace(foundedJoin, lateralJoin);
+      // skip if we can't detect right parts of join
+      if (!Array.isArray(parts) || parts.length < 2) {
+        return;
       }
+
+      const [joinStr, joinCond, nextJoin] = parts as string[];
+
+      // create sql for order, group by and pagination
+      const queryBuilder = this.connection
+        .createQueryBuilder()
+        .from(tablePath, 'never')
+        .withDeleted() as SelectQueryBuilder<ObjectLiteral>;
+      const [, extraCond] = TypeormJsonQuery.init<ObjectLiteral>(
+        {
+          queryBuilder,
+          query,
+        },
+        { defaultPageSize: defaultRelationPageSize, maxPageSize: defaultRelationMaxPageSize },
+      )
+        .toQuery()
+        .getSql()
+        .split(' "never" ');
+
+      // build lateral join
+      const foundedJoin = joinStr.replace(nextJoin, '');
+      const foundedCond = joinCond.replace(detectAliasRegexp, '');
+      const foundedExtraArgs = extraCond.replace(/"never"\./g, '');
+      const lateralJoin = `LEFT JOIN LATERAL (SELECT * FROM "${tablePath}" WHERE ${foundedCond} ${foundedExtraArgs}) "${aliasName}" ON TRUE`;
+
+      // replace original left join with lateral join
+      join = join.replace(foundedJoin, lateralJoin);
     });
 
     return join;
