@@ -428,6 +428,55 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Modify original left join's to lateral join's
+   * NOTE: should bind query builder context
+   * @private
+   */
+  private createJoinExpression(this: SelectQueryBuilder<TEntity>) {
+    const { defaultRelationPageSize, defaultRelationMaxPageSize } = this['jsonQueryOptions'];
+    let join = this['defaultCreateJoinExpression']();
+
+    this.expressionMap.joinAttributes.forEach(({ tablePath, alias }) => {
+      const aliasName = alias.name;
+      const joinRegex = new RegExp(
+        `LEFT JOIN "${tablePath}" "${aliasName}" ON (.*?)(\\s(JOIN|LEFT|INNER|RIGHT)|$)`,
+      );
+      const parts = join.match(joinRegex);
+
+      if (Array.isArray(parts) && parts.length > 1) {
+        const [joinStr, joinCond, nextJoin] = parts as string[];
+        const { query } = this['relationsByAlias'][aliasName] ?? {};
+
+        // create sql for order, group by and pagination
+        const queryBuilder: SelectQueryBuilder<ObjectLiteral> = this.connection
+          .createQueryBuilder()
+          .from(tablePath, 'never');
+        const [, extraCond] = TypeormJsonQuery.init<ObjectLiteral>(
+          {
+            queryBuilder,
+            query,
+          },
+          { defaultPageSize: defaultRelationPageSize, maxPageSize: defaultRelationMaxPageSize },
+        )
+          .toQuery()
+          .getSql()
+          .split(' "never" ');
+
+        // build lateral join
+        const foundedJoin = joinStr.replace(nextJoin, '');
+        const foundedCond = joinCond.replace(new RegExp(`"${aliasName}"\\.`, 'g'), '');
+        const foundedExtraArgs = extraCond.replace(/"never"\./g, '');
+        const lateralJoin = `LEFT JOIN LATERAL (SELECT * FROM "${tablePath}" WHERE ${foundedCond} ${foundedExtraArgs}) "${aliasName}" ON TRUE`;
+
+        // replace original left join with lateral join
+        join = join.replace(foundedJoin, lateralJoin);
+      }
+    });
+
+    return join;
+  }
+
+  /**
    * Enable lateral joins
    * @private
    */
@@ -436,56 +485,30 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     relations: IJsonRelationResult[],
   ): void {
     const { defaultRelationPageSize, defaultRelationMaxPageSize } = this.options;
-    const defaultCreateJoinExpression = qb['createJoinExpression'].bind(qb);
-    const relationsByAlias = relations.reduce(
+
+    // save default create join function
+    qb['defaultCreateJoinExpression'] = qb['createJoinExpression'].bind(qb);
+    // save default clone function
+    qb['defaultClone'] = qb['clone'].bind(qb);
+    // save indexed relations by alias
+    qb['relationsByAlias'] = relations.reduce(
       (res, relation) => ({
         ...res,
         [relation.alias]: relation,
       }),
       {},
     ) as { [alias: string]: IJsonRelationResult };
+    // save a few options for access from context
+    qb['jsonQueryOptions'] = { defaultRelationPageSize, defaultRelationMaxPageSize };
+    // define custom join's builder function
+    qb['createJoinExpression'] = this.createJoinExpression.bind(qb);
+    // make sure what after clone we keep custom function
+    qb['clone'] = () => {
+      const newQb = qb['defaultClone']();
 
-    qb['createJoinExpression'] = () => {
-      let join = defaultCreateJoinExpression();
+      this.enableLateralJoins(newQb, relations);
 
-      qb.expressionMap.joinAttributes.forEach(({ tablePath, alias }) => {
-        const aliasName = alias.name;
-        const joinRegex = new RegExp(
-          `LEFT JOIN "${tablePath}" "${aliasName}" ON (.*?)(\\s(JOIN|LEFT|INNER|RIGHT)|$)`,
-        );
-        const parts = join.match(joinRegex);
-
-        if (Array.isArray(parts) && parts.length > 1) {
-          const [joinStr, joinCond, nextJoin] = parts as string[];
-          const { query } = relationsByAlias[aliasName] ?? {};
-
-          // create sql for order, group by and pagination
-          const queryBuilder: SelectQueryBuilder<ObjectLiteral> = this.queryBuilder.connection
-            .createQueryBuilder()
-            .from(tablePath, 'never');
-          const [, extraCond] = TypeormJsonQuery.init<ObjectLiteral>(
-            {
-              queryBuilder,
-              query,
-            },
-            { defaultPageSize: defaultRelationPageSize, maxPageSize: defaultRelationMaxPageSize },
-          )
-            .toQuery()
-            .getSql()
-            .split(' "never" ');
-
-          // build lateral join
-          const foundedJoin = joinStr.replace(nextJoin, '');
-          const foundedCond = joinCond.replace(new RegExp(`"${aliasName}"\\.`, 'g'), '');
-          const foundedExtraArgs = extraCond.replace(/"never"\./g, '');
-          const lateralJoin = `LEFT JOIN LATERAL (SELECT * FROM "${tablePath}" WHERE ${foundedCond} ${foundedExtraArgs}) "${aliasName}" ON TRUE`;
-
-          // replace original left join with lateral join
-          join = join.replace(foundedJoin, lateralJoin);
-        }
-      });
-
-      return join;
+      return newQb;
     };
   }
 
