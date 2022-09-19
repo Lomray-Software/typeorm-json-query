@@ -809,8 +809,10 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
     // pagination
     if (!isDisablePagination) {
-      queryBuilder.take(this.getPageSize(pageSize || queryPageSize));
-      queryBuilder.skip(this.getPage(page || queryPage));
+      const finalPageSize = this.getPageSize(pageSize || queryPageSize);
+
+      queryBuilder.take(finalPageSize);
+      queryBuilder.skip(this.getPage(page || queryPage, finalPageSize));
     }
 
     // lateral joins

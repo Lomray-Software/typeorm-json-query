@@ -301,11 +301,18 @@ describe('services/typeorm-json-query', () => {
     expect(page).to.equal(4 * defaultPageSize);
   });
 
-  it('should return query defined page', () => {
+  it('should return query defined page: default', () => {
     const instance = TypeormJsonQuery.init({ queryBuilder, query: { page: 2 } });
     const page = instance.toQuery().getSql();
 
     expect(page.endsWith('LIMIT 25 OFFSET 25')).to.true;
+  });
+
+  it('should return query defined page: custom', () => {
+    const instance = TypeormJsonQuery.init({ queryBuilder, query: { page: 2, pageSize: 5 } });
+    const page = instance.toQuery().getSql();
+
+    expect(page.endsWith('LIMIT 5 OFFSET 5')).to.true;
   });
 
   it('should return default page size', () => {
