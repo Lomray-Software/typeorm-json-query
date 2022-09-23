@@ -46,9 +46,11 @@ jobs:
         run: npx semantic-release
 
   sonarcube:
-    name: Sonarcube
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     needs: release
+    concurrency:
+      group: ${{ github.ref }}-sonarcube
+      cancel-in-progress: true
 
     steps:
       - uses: actions/checkout@v2
@@ -64,10 +66,10 @@ jobs:
         id: package-version
         uses: Saionaro/extract-package-version@v1.1.1
 
-      - uses: sonarsource/sonarqube-scan-action@master
+      - uses: SonarSource/sonarcloud-github-action@master
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_CLOUD_TOKEN }}
         with:
           args: >
             -Dsonar.projectVersion=${{ steps.package-version.outputs.version }}

@@ -7,12 +7,12 @@
 ![GitHub package.json dependency version (dev dep on branch)](https://img.shields.io/github/package-json/dependency-version/Lomray-Software/typeorm-json-query/dev/typescript/master)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
 
-[![Quality Gate Status](https://sonarqube-proxy.lomray.com/status/Lomray-Software_typeorm-json-query?token=2677f17614bdedf08b34886913b457b1)](https://sonarqube.lomray.com/dashboard?id=Lomray-Software_typeorm-json-query)
-[![Reliability Rating](https://sonarqube-proxy.lomray.com/reliability/Lomray-Software_typeorm-json-query?token=2677f17614bdedf08b34886913b457b1)](https://sonarqube.lomray.com/dashboard?id=Lomray-Software_typeorm-json-query)
-[![Security Rating](https://sonarqube-proxy.lomray.com/security/Lomray-Software_typeorm-json-query?token=2677f17614bdedf08b34886913b457b1)](https://sonarqube.lomray.com/dashboard?id=Lomray-Software_typeorm-json-query)
-[![Vulnerabilities](https://sonarqube-proxy.lomray.com/vulnerabilities/Lomray-Software_typeorm-json-query?token=2677f17614bdedf08b34886913b457b1)](https://sonarqube.lomray.com/dashboard?id=Lomray-Software_typeorm-json-query)
-[![Lines of code](https://sonarqube-proxy.lomray.com/lines/Lomray-Software_typeorm-json-query?token=2677f17614bdedf08b34886913b457b1)](https://sonarqube.lomray.com/dashboard?id=Lomray-Software_typeorm-json-query)
-[![Coverage](https://sonarqube-proxy.lomray.com/coverage/Lomray-Software_typeorm-json-query?token=2677f17614bdedf08b34886913b457b1)](https://sonarqube.lomray.com/dashboard?id=Lomray-Software_typeorm-json-query)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Lomray-Software_typeorm-json-query&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Lomray-Software_typeorm-json-query)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Lomray-Software_typeorm-json-query&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=Lomray-Software_typeorm-json-query)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Lomray-Software_typeorm-json-query&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=Lomray-Software_typeorm-json-query)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Lomray-Software_typeorm-json-query&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=Lomray-Software_typeorm-json-query)
+[![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=Lomray-Software_typeorm-json-query&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=Lomray-Software_typeorm-json-query)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Lomray-Software_typeorm-json-query&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Lomray-Software_typeorm-json-query)
 
 ## Install
 ```bash
