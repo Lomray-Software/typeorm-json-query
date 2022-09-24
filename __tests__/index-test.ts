@@ -801,7 +801,7 @@ describe('services/typeorm-json-query', () => {
       {
         queryBuilder,
         query: {
-          attributes: ['id'],
+          attributes: ['id', 'testRelation.id'],
           relations: [{ name: 'testRelation', orderBy: { id: 'DESC' } }],
         },
       },
@@ -811,7 +811,7 @@ describe('services/typeorm-json-query', () => {
       .getQuery();
 
     expect(qbResult).to.equal(
-      'SELECT "TestEntity"."id" AS "TestEntity_id", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId" ORDER BY "TestEntity"."id" DESC',
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "testRelation"."id" AS "testRelation_id" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId" ORDER BY "TestEntity"."id" DESC',
     );
   });
 

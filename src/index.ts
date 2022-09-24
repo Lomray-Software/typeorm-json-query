@@ -796,16 +796,16 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const sorting = this.getOrderBy(orderBy);
     const groupByAttr = this.getGroupBy(groupBy);
 
-    if (select.length) {
-      queryBuilder.select(select);
-    }
-
     sorting.forEach(({ field, value, nulls }) => queryBuilder.addOrderBy(field, value, nulls));
     relations.forEach(({ property, alias, where: relationWhere, parameters }) =>
       queryBuilder.leftJoinAndSelect(property, alias, relationWhere, parameters),
     );
     conditions.forEach((condition) => queryBuilder.andWhere(condition));
     groupByAttr.forEach((field) => queryBuilder.addGroupBy(field));
+
+    if (select.length) {
+      queryBuilder.select(select);
+    }
 
     // pagination
     if (!isDisablePagination) {
