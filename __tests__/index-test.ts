@@ -627,8 +627,12 @@ describe('services/typeorm-json-query', () => {
       const result = () =>
         // @ts-ignore
         runCondition(emptyInstance.getWhere({ id: { [operator]: null } }));
+      const result2 = () =>
+        // @ts-ignore
+        runCondition(emptyInstance.getWhere({ id: { [operator]: [] } }));
 
-      expect(result).to.throw('"in or !in" should be array');
+      expect(result).to.throw('"in or !in" should be not empty array');
+      expect(result2).to.throw('"in or !in" should be not empty array');
     }
   });
 

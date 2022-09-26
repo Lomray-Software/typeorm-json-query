@@ -626,8 +626,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       const isNot = condition.hasOwnProperty(JQOperator.notIn) ? ' NOT' : '';
 
       // validation
-      if (!Array.isArray(value)) {
-        throw new Error(`Invalid json query: (${field}) "in or !in" should be array.`);
+      if (!Array.isArray(value) || value.length === 0) {
+        throw new Error(`Invalid json query: (${field}) "in or !in" should be not empty array.`);
       }
 
       qb.andWhere(`${castField}${isNot} IN (:...${parameter})`, {
