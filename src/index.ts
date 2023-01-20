@@ -532,7 +532,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     qb['createJoinExpression'] = this.createJoinExpression.bind(qb);
     // make sure what after clone we keep custom function
     qb['clone'] = () => {
-      const newQb = qb['defaultClone']();
+      const newQb = qb['defaultClone']() as SelectQueryBuilder<TEntity>;
 
       this.enableLateralJoins(newQb, relations);
 
@@ -741,7 +741,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
           }
 
           const subQb = new Brackets((nestedQb) => {
-            value.forEach((nestedCondition) => {
+            value.forEach((nestedCondition: IJsonQueryWhere) => {
               // build condition for one element from array
               const elementCondition = new Brackets((elementQb) =>
                 this.parseCondition(nestedCondition, elementQb, alias, deepLevel + 1),
@@ -760,7 +760,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
           break;
 
         default:
-          this.applyCondition(qb, this.withFieldAlias(field, alias), value);
+          this.applyCondition(qb, this.withFieldAlias(field, alias), value as TFilterCondition);
       }
     });
   }
