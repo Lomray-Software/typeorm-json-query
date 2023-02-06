@@ -59,8 +59,9 @@ export interface IJsonRelationResult {
   alias: string;
   where?: string;
   parameters?: Record<string, any>;
-  query: Pick<IJsonQuery, 'page' | 'pageSize' | 'orderBy' | 'groupBy'>;
-  isLateral: boolean;
+  query?: Pick<IJsonQuery, 'page' | 'pageSize' | 'orderBy' | 'groupBy'>;
+  isLateral?: boolean;
+  isSelect?: boolean;
 }
 
 // noinspection SuspiciousTypeOfGuard
@@ -331,6 +332,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         orderBy,
         groupBy,
         isLateral = false,
+        isSelect = true,
       } = typeof relation === 'object' && relation !== null
         ? relation
         : {
@@ -371,6 +373,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         where: whereCondition,
         parameters: whereParameters,
         isLateral,
+        isSelect,
         query: {
           page,
           pageSize,
@@ -797,8 +800,13 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const groupByAttr = this.getGroupBy(groupBy);
 
     sorting.forEach(({ field, value, nulls }) => queryBuilder.addOrderBy(field, value, nulls));
-    relations.forEach(({ property, alias, where: relationWhere, parameters }) =>
-      queryBuilder.leftJoinAndSelect(property, alias, relationWhere, parameters),
+    relations.forEach(({ property, alias, where: relationWhere, parameters, isSelect }) =>
+      queryBuilder[isSelect ? 'leftJoinAndSelect' : 'leftJoin'](
+        property,
+        alias,
+        relationWhere,
+        parameters,
+      ),
     );
     conditions.forEach((condition) => queryBuilder.andWhere(condition));
     groupByAttr.forEach((field) => queryBuilder.addGroupBy(field));

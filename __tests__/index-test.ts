@@ -7,6 +7,7 @@ import {
   JQOrderNulls,
 } from '@lomray/microservices-types';
 import { expect } from 'chai';
+import sinon from 'sinon';
 import type { Brackets } from 'typeorm';
 import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
@@ -34,6 +35,7 @@ describe('services/typeorm-json-query', () => {
       pageSize: undefined,
     },
     isLateral: false,
+    isSelect: true,
   };
 
   const commonInstance = TypeormJsonQuery.init({
@@ -817,6 +819,27 @@ describe('services/typeorm-json-query', () => {
     expect(qbResult).to.equal(
       'SELECT "TestEntity"."id" AS "TestEntity_id", "testRelation"."id" AS "testRelation_id" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId" ORDER BY "TestEntity"."id" DESC',
     );
+  });
+
+  it('should return query and disable select relations', () => {
+    const qb = queryBuilder.clone();
+    const onlyJoin = sinon.spy(qb, 'leftJoin');
+    const joinAndSelect = sinon.spy(qb, 'leftJoinAndSelect');
+    const mockedQb = sinon.stub(queryBuilder, 'clone').returns(qb);
+
+    TypeormJsonQuery.init({
+      queryBuilder,
+      query: {
+        relations: [{ name: 'testRelation', isSelect: false }],
+      },
+    })
+      .toQuery()
+      .getQuery();
+
+    mockedQb.restore();
+
+    expect(onlyJoin).to.calledOnce;
+    expect(joinAndSelect).to.not.calledOnce;
   });
 
   it('should return right sql query with disabled lateral joins', () => {
