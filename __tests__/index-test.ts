@@ -47,8 +47,10 @@ describe('services/typeorm-json-query', () => {
       where: { id: 1 },
     },
     authQuery: {
-      attributes: commonAuthQueryAttributes,
-      where: { param: 'authParam' },
+      query: {
+        attributes: commonAuthQueryAttributes,
+        where: { param: 'authParam' },
+      },
     },
   });
   const emptyInstance = TypeormJsonQuery.init({ queryBuilder });
@@ -84,7 +86,9 @@ describe('services/typeorm-json-query', () => {
     const instance = TypeormJsonQuery.init({
       queryBuilder,
       authQuery: {
-        maxPageSize: 100,
+        options: {
+          maxPageSize: 100,
+        },
       },
     });
 
@@ -110,21 +114,11 @@ describe('services/typeorm-json-query', () => {
       { field: '', msg: 'Invalid json query', types: ['', null] },
       { field: 'page', msg: 'Invalid json query: page.', types },
       { field: 'pageSize', msg: 'Invalid json query: page size.', types },
-      {
-        field: 'maxPageSize',
-        msg: 'Invalid auth json query: max page size.',
-        types,
-        only: 'authQuery',
-      },
     ];
 
     for (const queryType of queries) {
-      for (const { field, msg, types: typesField, only } of fields) {
+      for (const { field, msg, types: typesField } of fields) {
         for (const type of typesField) {
-          if (only && only !== queryType) {
-            continue;
-          }
-
           const query = field
             ? {
                 [field]: type,
@@ -135,7 +129,7 @@ describe('services/typeorm-json-query', () => {
             TypeormJsonQuery.init({
               queryBuilder,
               // @ts-ignore
-              [queryType]: query,
+              [queryType]: queryType === 'query' ? query : { query },
             });
 
           expect(run).to.throw(msg);
@@ -474,16 +468,54 @@ describe('services/typeorm-json-query', () => {
     expect(result).to.throw('reached maximum depth');
   });
 
+  it('should success return relations without duplicates', () => {
+    const relations = commonInstance.getRelations(['testRelation', { name: 'testRelation' }]);
+
+    expect(relations).to.deep.equal([
+      {
+        property: withAlias(commonRelations?.[0] as string),
+        alias: commonRelations?.[0],
+        where: undefined,
+        parameters: undefined,
+        ...defaultRelationQuery,
+      },
+    ]);
+  });
+
+  it('should success return merged relations', () => {
+    const relations = commonInstance.getRelations([
+      { name: 'testRelation', where: { id: 1 }, groupBy: ['id'] },
+      { name: 'testRelation', where: { id: 2 }, groupBy: ['id'] },
+    ]);
+
+    expect(relations).to.deep.equal([
+      {
+        property: withAlias(commonRelations?.[0] as string),
+        alias: commonRelations?.[0],
+        where: ' AND testRelation.id = :testRelation.id_1 AND testRelation.id = :testRelation.id_2',
+        parameters: {
+          'testRelation.id_1': 1,
+          'testRelation.id_2': 2,
+        },
+        ...defaultRelationQuery,
+        query: {
+          ...defaultRelationQuery.query,
+          groupBy: ['id'],
+        },
+      },
+    ]);
+  });
+
   it('should success return where condition: query & authQuery', () => {
     const [queryWhere, authQuery] = commonInstance.getWhere();
 
     expect(bracketToWhere(queryWhere)).to.deep.equal([
-      '("TestEntity"."id" = :TestEntity.id_1)',
-      { 'TestEntity.id_1': 1 },
+      '("TestEntity"."id" = :TestEntity.id_3)',
+      { 'TestEntity.id_3': 1 },
     ]);
     expect(bracketToWhere(authQuery)).to.deep.equal([
-      '("TestEntity"."param" = :TestEntity.param_2)',
-      { 'TestEntity.param_2': 'authParam' },
+      '("TestEntity"."param" = :TestEntity.param_4)',
+      { 'TestEntity.param_4': 'authParam' },
     ]);
   });
 
@@ -792,7 +824,7 @@ describe('services/typeorm-json-query', () => {
     const qbResult = TypeormJsonQuery.init({
       queryBuilder,
       query: { where: { id: 1 }, orderBy: { id: JQOrder.ASC }, groupBy: ['id'] },
-      authQuery: { where: { param: 'auth' } },
+      authQuery: { query: { where: { param: 'auth' } } },
     })
       .toQuery()
       .getQuery();

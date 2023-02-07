@@ -15,22 +15,10 @@ import {
 import type { WhereExpressionBuilder, SelectQueryBuilder } from 'typeorm';
 import { Brackets } from 'typeorm';
 
-export interface IJsonQueryAuth<TEntity = ObjectLiteral>
-  extends Omit<IJsonQuery<TEntity>, 'orderBy' | 'page' | 'pageSize' | 'relations'> {
-  maxPageSize?: number;
-  maxDeepRelation?: number;
-  maxDeepWhere?: number;
-  defaultRelationMaxPageSize?: number;
-  isDisableRelations?: boolean;
-  isDisableAttributes?: boolean;
-  isDisableOrderBy?: boolean;
-  isDisablePagination?: boolean;
-}
-
 export interface ITypeormJsonQueryArgs<TEntity = ObjectLiteral> {
   queryBuilder: SelectQueryBuilder<TEntity>;
   query?: IJsonQuery<TEntity>;
-  authQuery?: IJsonQueryAuth<TEntity>;
+  authQuery?: { options?: Partial<ITypeormJsonQueryOptions>; query?: IJsonQuery<TEntity> };
 }
 
 export interface ITypeormJsonQueryOptions {
@@ -121,11 +109,11 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   ) {
     this.queryBuilder = queryBuilder;
     this.query = this.validate(query);
-    this.authQuery = this.validateAuth(authQuery);
+    this.authQuery = this.validate(authQuery.query);
 
     // replace default options with authQuery or user defined
     Object.keys(this.options).forEach((name) => {
-      const definedValue = authQuery[name] ?? options[name];
+      const definedValue = authQuery?.options?.[name] ?? options[name];
 
       if (definedValue !== undefined) {
         this.options[name] = definedValue;
@@ -147,7 +135,11 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * Run json query validation
    * @private
    */
-  private validate(query: IJsonQuery<TEntity>): IJsonQuery<TEntity> {
+  private validate(query?: IJsonQuery<TEntity>): IJsonQuery<TEntity> {
+    if (query === undefined) {
+      return {};
+    }
+
     if (typeof query !== 'object' || query === null) {
       throw new Error('Invalid json query.');
     }
@@ -158,20 +150,6 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
     if (!['number', 'undefined'].includes(typeof query.pageSize) || query.pageSize === null) {
       throw new Error('Invalid json query: page size.');
-    }
-
-    return query;
-  }
-
-  /**
-   * Validate auth query
-   * @private
-   */
-  private validateAuth(query: IJsonQueryAuth<TEntity>): IJsonQueryAuth<TEntity> {
-    this.validate(query);
-
-    if (!['number', 'undefined'].includes(typeof query.maxPageSize) || query.maxPageSize === null) {
-      throw new Error('Invalid auth json query: max page size.');
     }
 
     return query;
@@ -323,7 +301,13 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       return [];
     }
 
-    return [...new Set([...(this.query.relations ?? []), ...(relations ?? [])])].map((relation) => {
+    const result: { [property: string]: IJsonRelationResult } = {};
+
+    [
+      ...(this.query.relations ?? []),
+      ...(this.authQuery.relations ?? []),
+      ...(relations ?? []),
+    ].forEach((relation) => {
       const {
         name,
         where,
@@ -356,6 +340,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       let whereCondition;
       let whereParameters;
       const alias = name.replace(/\./g, '_');
+      const property = this.withFieldAlias(name);
 
       if (where) {
         const relationWhere = this.queryBuilder.connection
@@ -367,8 +352,26 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         [whereCondition, whereParameters] = TypeormJsonQuery.qbWhereParse(relationWhere);
       }
 
-      return {
-        property: this.withFieldAlias(name),
+      const prevValues = result[property];
+
+      // only merge
+      if (prevValues) {
+        if (whereCondition) {
+          prevValues.where = [prevValues.where, whereCondition].join(' AND ');
+          prevValues.parameters = { ...prevValues.parameters, ...whereParameters };
+        }
+
+        if (groupBy) {
+          prevValues.query!.groupBy = [
+            ...new Set([...(prevValues.query?.groupBy ?? []), ...groupBy]),
+          ];
+        }
+
+        return;
+      }
+
+      result[property] = {
+        property,
         alias,
         where: whereCondition,
         parameters: whereParameters,
@@ -382,6 +385,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         },
       };
     });
+
+    return Object.values(result);
   }
 
   /**
