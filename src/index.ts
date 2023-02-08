@@ -395,7 +395,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const condition = query
       .getQuery()
       .split('WHERE ')[1]
-      ?.split(/\s(limit|order|group|having)/i)?.[0];
+      ?.split(/\s(limit\s|order\sby|group\sby|having\s)/i)?.[0];
 
     if (condition) {
       return [condition, query.getParameters()];

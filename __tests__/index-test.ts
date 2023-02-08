@@ -381,6 +381,30 @@ describe('services/typeorm-json-query', () => {
     expect(params).to.deep.equal({ id: 1, param: 2 });
   });
 
+  it('should return parsed query builder where case #2', () => {
+    const qb = repository
+      .createQueryBuilder()
+      .where('id = :id', { id: 1 })
+      .andWhere('group > :param', { param: 2 })
+      .orderBy('id');
+    const [condition, params] = TypeormJsonQuery.qbWhereParse(qb);
+
+    expect(condition).to.equal('id = :id AND group > :param');
+    expect(params).to.deep.equal({ id: 1, param: 2 });
+  });
+
+  it('should return parsed query builder where case #3', () => {
+    const qb = repository
+      .createQueryBuilder()
+      .where('id = :id', { id: 1 })
+      .andWhere('group > :param', { param: 2 })
+      .groupBy('param');
+    const [condition, params] = TypeormJsonQuery.qbWhereParse(qb);
+
+    expect(condition).to.equal('id = :id AND group > :param');
+    expect(params).to.deep.equal({ id: 1, param: 2 });
+  });
+
   it('should return parsed (empty) query builder where', () => {
     const qb = repository.createQueryBuilder().orderBy('id');
     const [condition, params] = TypeormJsonQuery.qbWhereParse(qb);
