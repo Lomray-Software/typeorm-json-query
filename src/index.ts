@@ -1,18 +1,18 @@
 import type {
   IJsonQuery,
-  ObjectLiteral,
   IJsonQueryOrderField,
-  TFilterCondition,
   IJsonQueryWhere,
+  ObjectLiteral,
+  TFilterCondition,
 } from '@lomray/microservices-types';
 import {
-  JQOrder,
-  JQOperator,
-  JQOrderNulls,
   JQFieldType,
   JQJunction,
+  JQOperator,
+  JQOrder,
+  JQOrderNulls,
 } from '@lomray/microservices-types';
-import type { WhereExpressionBuilder, SelectQueryBuilder } from 'typeorm';
+import type { SelectQueryBuilder, WhereExpressionBuilder } from 'typeorm';
 import { Brackets } from 'typeorm';
 
 export interface ITypeormJsonQueryArgs<TEntity = ObjectLiteral> {
@@ -447,6 +447,24 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Field value like link on other field
+   * @private
+   */
+  private static isFieldValueLink(value: string, options: TFilterCondition): boolean {
+    if (typeof options !== 'object' || options === null || !options.isField) {
+      return false;
+    }
+
+    const { isField } = options;
+
+    if (typeof value !== 'string') {
+      throw new Error(`Invalid json query: field value type or value is invalid.`);
+    }
+
+    return isField === true;
+  }
+
+  /**
    * Modify original left join's to lateral join's
    * NOTE: should bind query builder context
    * @private
@@ -573,6 +591,12 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       // @ts-ignore
       const value = condition?.[JQOperator.equal] ?? condition;
 
+      if (TypeormJsonQuery.isFieldValueLink(value as string, condition)) {
+        qb.andWhere(`${castField} = ${this.withFieldAlias(value as string)}`);
+
+        return;
+      }
+
       qb.andWhere(`${castField} = :${parameter}`, {
         [parameter]: value,
       });
@@ -589,6 +613,12 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         throw new Error(
           `Invalid json query: (${field}) "!=" should be one of [string,number,null].`,
         );
+      }
+
+      if (TypeormJsonQuery.isFieldValueLink(value as string, condition)) {
+        qb.andWhere(`${castField} != ${this.withFieldAlias(value as string)}`);
+
+        return;
       }
 
       qb.andWhere(`${castField} != :${parameter}`, {

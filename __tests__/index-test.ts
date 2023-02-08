@@ -839,6 +839,7 @@ describe('services/typeorm-json-query', () => {
       {
         queryBuilder,
         query: {
+          // eslint-disable-next-line sonarjs/no-duplicate-string
           attributes: ['id', 'testRelation.id'],
           relations: [{ name: 'testRelation', orderBy: { id: 'DESC' } }],
         },
@@ -923,6 +924,41 @@ describe('services/typeorm-json-query', () => {
 
     expect(qbResult).to.equal(
       'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId" WHERE ("testRelation"."id" = :testRelation.id_1)',
+    );
+  });
+
+  it('should return right sql query with field value type - field', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: {
+        relations: [{ name: 'testRelation' }],
+        where: {
+          id: { '=': 'testRelation.id', isField: true },
+          param: { '!=': 'testRelation.id', isField: true },
+        },
+      },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId" WHERE ("TestEntity"."id" = "testRelation"."id" AND "TestEntity"."param" != "testRelation"."id")',
+    );
+  });
+
+  it('should throw validation error: field value type wrong value', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: {
+        relations: [{ name: 'testRelation' }],
+        where: {
+          id: { '=': 1, isField: true },
+        },
+      },
+    });
+
+    expect(() => qbResult.toQuery()).to.throw(
+      'Invalid json query: field value type or value is invalid.',
     );
   });
 });
