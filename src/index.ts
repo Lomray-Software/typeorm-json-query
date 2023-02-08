@@ -174,12 +174,10 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * Get query attributes
    */
   public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): string[] {
-    if (this.options.isDisableAttributes) {
-      return [];
-    }
+    const { isDisableAttributes } = this.options;
 
     const attributes = [
-      ...(this.query.attributes || []),
+      ...(isDisableAttributes ? [] : this.query.attributes ?? []),
       ...(this.authQuery.attributes || []),
       ...attrs,
     ].map((field) => {
@@ -197,13 +195,18 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * Get query sorting
    */
   public getOrderBy(orderBy?: IJsonQuery<TEntity>['orderBy']): IJsonOrderByResult[] {
-    if (this.options.isDisableOrderBy) {
-      return [];
-    }
+    const { isDisableOrderBy } = this.options;
 
     let result = {};
+    const orderConditions = [];
 
-    for (const orderCondition of [this.query.orderBy, orderBy]) {
+    if (!isDisableOrderBy) {
+      orderConditions.push(this.query.orderBy);
+    }
+
+    orderConditions.push(orderBy);
+
+    for (const orderCondition of orderConditions) {
       if (!orderCondition) {
         continue;
       }
@@ -248,12 +251,10 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * Get query group by attributes
    */
   public getGroupBy(attrs: IJsonQuery<TEntity>['groupBy'] = []): string[] {
-    if (this.options.isDisableGroupBy) {
-      return [];
-    }
+    const { isDisableGroupBy } = this.options;
 
     const attributes = [
-      ...(this.query.groupBy || []),
+      ...(isDisableGroupBy ? [] : this.query.groupBy || []),
       ...(this.authQuery.groupBy || []),
       ...attrs,
     ].map((field) => {
@@ -297,14 +298,10 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   public getRelations(relations?: IJsonQuery<TEntity>['relations']): IJsonRelationResult[] {
     const { maxDeepRelation, isDisableRelations } = this.options;
 
-    if (isDisableRelations) {
-      return [];
-    }
-
     const result: { [property: string]: IJsonRelationResult } = {};
 
     [
-      ...(this.query.relations ?? []),
+      ...(isDisableRelations ? [] : this.query.relations ?? []),
       ...(this.authQuery.relations ?? []),
       ...(relations ?? []),
     ].forEach((relation) => {

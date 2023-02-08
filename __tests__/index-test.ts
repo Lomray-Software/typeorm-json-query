@@ -143,11 +143,15 @@ describe('services/typeorm-json-query', () => {
       {
         queryBuilder,
         query: { attributes: ['id'] },
+        authQuery: { query: { attributes: ['param'] } },
       },
       { isDisableAttributes: true },
     );
 
-    expect(instance.getAttributes(['param'])).to.deep.equal([]);
+    // @ts-ignore
+    const res = instance.getAttributes(['param2']);
+
+    expect(res).to.deep.equal(['TestEntity.param', 'TestEntity.param2']);
   });
 
   it('should return attributes with aliases', () => {
@@ -196,16 +200,20 @@ describe('services/typeorm-json-query', () => {
     ]);
   });
 
-  it('should return empty group by attributes: disable attributes', () => {
+  it('should return empty group by: disable group by', () => {
     const instance = TypeormJsonQuery.init(
       {
         queryBuilder,
         query: { groupBy: ['id'] },
+        authQuery: { query: { groupBy: ['param'] } },
       },
       { isDisableGroupBy: true },
     );
 
-    expect(instance.getGroupBy(['param'])).to.deep.equal([]);
+    // @ts-ignore
+    const res = instance.getGroupBy(['param2']);
+
+    expect(res).to.deep.equal(['TestEntity.param', 'TestEntity.param2']);
   });
 
   it('should return group by attributes with aliases', () => {
@@ -228,11 +236,12 @@ describe('services/typeorm-json-query', () => {
       {
         queryBuilder,
         query: { orderBy: { id: JQOrder.DESC } },
+        authQuery: { query: { orderBy: { param: JQOrder.DESC } } },
       },
       { isDisableOrderBy: true },
     );
 
-    expect(instance.getOrderBy({ param: { order: JQOrder.ASC } })).to.deep.equal([]);
+    expect(instance.getOrderBy()).to.deep.equal([]);
   });
 
   it('should return orderBy with aliases', () => {
@@ -385,11 +394,18 @@ describe('services/typeorm-json-query', () => {
       {
         queryBuilder,
         query: { relations: ['testRelation'] },
+        // @ts-ignore
+        authQuery: { query: { relations: ['otherRelation'] } },
       },
       { isDisableRelations: true },
     );
 
-    expect(instance.getRelations(['testRelation'])).to.deep.equal([]);
+    // @ts-ignore
+    const rel = instance.getRelations(['myRelation']);
+
+    expect(rel.length).to.equal(2);
+    expect(rel[0].alias).to.equal('otherRelation');
+    expect(rel[1].alias).to.equal('myRelation');
   });
 
   it('should success return relations', () => {
