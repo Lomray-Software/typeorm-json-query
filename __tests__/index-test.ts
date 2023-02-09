@@ -151,7 +151,7 @@ describe('services/typeorm-json-query', () => {
     // @ts-ignore
     const res = instance.getAttributes(['param2']);
 
-    expect(res).to.deep.equal(['TestEntity.param', 'TestEntity.param2']);
+    expect(res).to.deep.equal(['TestEntity.param2', 'TestEntity.param']);
   });
 
   it('should return attributes with aliases', () => {
@@ -191,12 +191,10 @@ describe('services/typeorm-json-query', () => {
     const attributes = commonInstance.getAttributes(['id', 'rel1.id', 'rel1.rel2.id']);
 
     expect(attributes).to.deep.equal([
-      ...withAlias([
-        ...(commonQueryAttributes as string[]),
-        ...(commonAuthQueryAttributes as string[]),
-      ]),
+      ...withAlias([...(commonQueryAttributes as string[])]),
       'rel1.id',
       'rel1_rel2.id',
+      ...withAlias([...(commonAuthQueryAttributes as string[])]),
     ]);
   });
 
@@ -213,7 +211,7 @@ describe('services/typeorm-json-query', () => {
     // @ts-ignore
     const res = instance.getGroupBy(['param2']);
 
-    expect(res).to.deep.equal(['TestEntity.param', 'TestEntity.param2']);
+    expect(res).to.deep.equal(['TestEntity.param2', 'TestEntity.param']);
   });
 
   it('should return group by attributes with aliases', () => {
@@ -428,8 +426,8 @@ describe('services/typeorm-json-query', () => {
     const rel = instance.getRelations(['myRelation']);
 
     expect(rel.length).to.equal(2);
-    expect(rel[0].alias).to.equal('otherRelation');
-    expect(rel[1].alias).to.equal('myRelation');
+    expect(rel[0].alias).to.equal('myRelation');
+    expect(rel[1].alias).to.equal('otherRelation');
   });
 
   it('should success return relations', () => {
@@ -442,6 +440,46 @@ describe('services/typeorm-json-query', () => {
         where: undefined,
         parameters: undefined,
         ...defaultRelationQuery,
+      },
+    ]);
+  });
+
+  it('should disable select relation: testRelation', () => {
+    const instance = TypeormJsonQuery.init<TestEntity>({
+      queryBuilder,
+      query: { relations: ['testRelation'] },
+      authQuery: { options: { relationOptions: [{ name: 'testRelation' }] } },
+    });
+    const relations = instance.getRelations();
+
+    expect(relations).to.deep.equal([
+      {
+        property: withAlias(commonRelations?.[0] as string),
+        alias: commonRelations?.[0],
+        where: undefined,
+        parameters: undefined,
+        ...defaultRelationQuery,
+        isSelect: false,
+      },
+    ]);
+  });
+
+  it('should disable select all relations', () => {
+    const instance = TypeormJsonQuery.init<TestEntity>({
+      queryBuilder,
+      query: { relations: ['testRelation'] },
+      authQuery: { options: { relationOptions: ['*'] } },
+    });
+    const relations = instance.getRelations();
+
+    expect(relations).to.deep.equal([
+      {
+        property: withAlias(commonRelations?.[0] as string),
+        alias: commonRelations?.[0],
+        where: undefined,
+        parameters: undefined,
+        ...defaultRelationQuery,
+        isSelect: false,
       },
     ]);
   });

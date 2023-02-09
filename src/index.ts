@@ -23,11 +23,19 @@ export interface ITypeormJsonQueryArgs<TEntity = ObjectLiteral> {
 
 export interface ITypeormJsonQueryOptions {
   defaultPageSize: number;
-  maxPageSize: number; // 0 - disable (query all items), 200 - default value
-  maxDeepRelation: number; // level1.level2.level3.etc...
-  maxDeepWhere: number; // { and: [{ and: [{ and: [] }]}] } deep condition level
+  // 0 - disable (query all items), 200 - default value
+  maxPageSize: number;
+  // level1.level2.level3.etc...
+  maxDeepRelation: number;
+  // { and: [{ and: [{ and: [] }]}] } deep condition level
+  maxDeepWhere: number;
   defaultRelationPageSize: number;
   defaultRelationMaxPageSize: number;
+  /**
+   *  E.g.: ['*'] - disable select relations (only join) or ['relation', { name: 'some-relation', isSelect: false, isLateral: true }]
+   *  NOTE: by default DISABLE select provided relations
+   */
+  relationOptions?: ({ name: string; isSelect?: boolean; isLateral?: boolean } | string)[];
   isDisableRelations?: boolean;
   isDisableAttributes?: boolean;
   isDisableOrderBy?: boolean;
@@ -82,6 +90,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     maxDeepWhere: 5,
     defaultRelationPageSize: 50,
     defaultRelationMaxPageSize: 100,
+    relationOptions: [],
     isDisableAttributes: false,
     isDisableRelations: false,
     isDisableOrderBy: false,
@@ -113,7 +122,13 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
     // replace default options with authQuery or user defined
     Object.keys(this.options).forEach((name) => {
-      const definedValue = authQuery?.options?.[name] ?? options[name];
+      let definedValue;
+
+      if (Array.isArray(this.options[name])) {
+        definedValue = [...(options?.[name] ?? []), ...(authQuery?.options?.[name] ?? [])];
+      } else {
+        definedValue = authQuery?.options?.[name] ?? options[name];
+      }
 
       if (definedValue !== undefined) {
         this.options[name] = definedValue;
@@ -178,8 +193,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
     const attributes = [
       ...(isDisableAttributes ? [] : this.query.attributes ?? []),
-      ...(this.authQuery.attributes || []),
       ...attrs,
+      ...(this.authQuery.attributes || []),
     ].map((field) => {
       if (!field || typeof field !== 'string') {
         throw new Error('Invalid json query: some attribute has incorrect name.');
@@ -255,8 +270,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
     const attributes = [
       ...(isDisableGroupBy ? [] : this.query.groupBy || []),
-      ...(this.authQuery.groupBy || []),
       ...attrs,
+      ...(this.authQuery.groupBy || []),
     ].map((field) => {
       if (!field || typeof field !== 'string') {
         throw new Error('Invalid json query: some group by attribute has incorrect name.');
@@ -296,14 +311,26 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * Get query relations
    */
   public getRelations(relations?: IJsonQuery<TEntity>['relations']): IJsonRelationResult[] {
-    const { maxDeepRelation, isDisableRelations } = this.options;
+    const { maxDeepRelation, isDisableRelations, relationOptions } = this.options;
 
+    const mapRelationOptions = relationOptions!.reduce((res, rel) => {
+      const {
+        name,
+        isSelect = false,
+        isLateral = false,
+      } = typeof rel === 'object' && rel !== null ? rel : { name: rel };
+
+      return {
+        [name]: { isSelect, isLateral },
+        ...res,
+      };
+    }, {});
     const result: { [property: string]: IJsonRelationResult } = {};
 
     [
       ...(isDisableRelations ? [] : this.query.relations ?? []),
-      ...(this.authQuery.relations ?? []),
       ...(relations ?? []),
+      ...(this.authQuery.relations ?? []),
     ].forEach((relation) => {
       const {
         name,
@@ -323,8 +350,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
             pageSize: undefined,
             orderBy: undefined,
             groupBy: undefined,
-            isLateral: false,
           };
+      const { isSelect: isAllowSelect = true, isLateral: isAllowLateral = true } =
+        mapRelationOptions[name as string] ?? mapRelationOptions['*'] ?? {};
 
       if (!name || typeof name !== 'string') {
         throw new Error('Invalid json query: some relation has incorrect name.');
@@ -372,8 +400,8 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         alias,
         where: whereCondition,
         parameters: whereParameters,
-        isLateral,
-        isSelect,
+        isLateral: isAllowLateral ? isLateral : false,
+        isSelect: isAllowSelect ? isSelect : false,
         query: {
           page,
           pageSize,
