@@ -254,6 +254,24 @@ describe('services/typeorm-json-query', () => {
     ]);
   });
 
+  it('should return orderBy with null transformation', () => {
+    const instance = TypeormJsonQuery.init({
+      queryBuilder,
+      query: { orderBy: { id: { order: JQOrder.DESC, isEmptyToNull: true } } },
+    });
+
+    expect(instance.getOrderBy()).to.deep.equal([
+      {
+        field: "NULLIF(TestEntity.id, '')",
+        nulls: undefined,
+        value: JQOrder.DESC,
+      },
+    ]);
+    expect(instance.toQuery().getQuery()).to.equal(
+      `SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId" FROM "test_entity" "TestEntity" ORDER BY NULLIF("TestEntity"."id", '') DESC LIMIT 25`,
+    );
+  });
+
   it('should return orderBy with used defined: prevent duplicates & with nullish', () => {
     const orderBy = commonInstance.getOrderBy({
       id: { order: JQOrder.ASC, nulls: JQOrderNulls.last },

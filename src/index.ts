@@ -48,6 +48,7 @@ export interface IJsonOrderByResult {
   field: string;
   value: JQOrder;
   nulls: 'NULLS FIRST' | 'NULLS LAST';
+  isEmptyToNull: boolean;
 }
 
 export interface IJsonRelationResult {
@@ -227,7 +228,11 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       }
 
       result = Object.entries(orderCondition).reduce((res, [field, sort]) => {
-        const { order, nulls } = (
+        const {
+          order,
+          nulls,
+          isEmptyToNull = false,
+        } = (
           typeof sort === 'object' && sort !== null ? sort : { order: sort }
         ) as IJsonQueryOrderField;
 
@@ -251,7 +256,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         return {
           ...res,
           [sortField]: {
-            field: sortField,
+            field: isEmptyToNull ? `NULLIF(${sortField}, '')` : sortField,
             value: order,
             nulls: nullsOperator,
           },
