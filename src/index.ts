@@ -61,6 +61,13 @@ export interface IJsonRelationResult {
   isSelect?: boolean;
 }
 
+type TOrderExpressions = {
+  field: string;
+  expression: IJsonQueryOrderField['expression'];
+  order: IJsonQueryOrderField['order'];
+  nulls?: string;
+};
+
 // noinspection SuspiciousTypeOfGuard
 /**
  * Convert json query to typeorm condition options
@@ -106,6 +113,12 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * @private
    */
   private queryParamsCount = 0;
+
+  /**
+   * Enable order expressions
+   * @private
+   */
+  private orderExpressions = new Map<string, TOrderExpressions>();
 
   /**
    * @constructor
@@ -208,6 +221,33 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Apply order by expression
+   * @protected
+   */
+  protected static applyOrderByExpression(
+    field: string,
+    expression: IJsonQueryOrderField['expression'],
+  ): string {
+    if (!expression) {
+      return field;
+    }
+
+    const { type, value } = expression;
+
+    if (/[^\s\w_.-]/.test(value)) {
+      throw new Error('Invalid json query: order by expression value invalid.');
+    }
+
+    switch (type) {
+      case 'NULLIF':
+        return `NULLIF(${field}, '${value}')`;
+
+      default:
+        return field;
+    }
+  }
+
+  /**
    * Get query sorting
    */
   public getOrderBy(orderBy?: IJsonQuery<TEntity>['orderBy']): IJsonOrderByResult[] {
@@ -228,11 +268,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       }
 
       result = Object.entries(orderCondition).reduce((res, [field, sort]) => {
-        const {
-          order,
-          nulls,
-          isEmptyToNull = false,
-        } = (
+        const { order, nulls, expression } = (
           typeof sort === 'object' && sort !== null ? sort : { order: sort }
         ) as IJsonQueryOrderField;
 
@@ -252,11 +288,21 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         }
 
         const sortField = this.withFieldAlias(field);
+        const sortExpression = TypeormJsonQuery.applyOrderByExpression(sortField, expression);
+
+        if (expression) {
+          this.orderExpressions.set(sortExpression, {
+            field: sortField,
+            expression,
+            order,
+            nulls: nullsOperator,
+          });
+        }
 
         return {
           ...res,
           [sortField]: {
-            field: isEmptyToNull ? `NULLIF(${sortField}, '')` : sortField,
+            field: sortExpression,
             value: order,
             nulls: nullsOperator,
           },
@@ -561,6 +607,106 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Handle order by expressions
+   * NOTE: typeorm has a problem with order by expressions and relations
+   * @private
+   */
+  private createOrderExpression(this: SelectQueryBuilder<TEntity>, ...args: any[]) {
+    const orderExpressions = this['orderExpressions'] as TypeormJsonQuery['orderExpressions'];
+    const defaultOrderBys = this.expressionMap.orderBys;
+    const tempOrderBys = { ...defaultOrderBys };
+    let dynamicFields = 1;
+
+    // replace all order fields with expressions to fields without expressions
+    orderExpressions.forEach(({ field, ...expParams }, sortField) => {
+      const value = tempOrderBys?.[field] ?? tempOrderBys[sortField];
+      const hasOriginalField = field in tempOrderBys;
+
+      delete tempOrderBys[sortField];
+
+      tempOrderBys[field] = {
+        ...(typeof value === 'string' ? { order: value } : value),
+        // @ts-ignore
+        hasOriginalField,
+        // @ts-ignore
+        expressions: [...(tempOrderBys?.[field]?.expressions ?? []), expParams],
+      };
+    });
+
+    // patch temporary
+    this.expressionMap.orderBys = tempOrderBys;
+
+    const [selects, orders] = this['defaultCreateOrderByCombinedWithSelectExpression'](...args);
+
+    // restore
+    this.expressionMap.orderBys = defaultOrderBys;
+
+    let selectsWithExpressions = selects;
+    // apply expressions to specified fields
+    const ordersWithExpressions = Object.entries(orders as Record<string, any>).reduce(
+      (res, [field, value]) => {
+        // keep simple field
+        if (typeof value !== 'object' || !value?.expressions) {
+          return { ...res, [field]: value };
+        }
+
+        const { expressions, hasOriginalField, ...orderParams } = value;
+        const fieldName = `"orderExpr${dynamicFields}"`;
+        const expressionFields = (expressions as TOrderExpressions[]).reduce(
+          (resExpr, { expression, ...sortParams }) => {
+            dynamicFields += 1;
+            selectsWithExpressions = [
+              selectsWithExpressions,
+              `${TypeormJsonQuery.applyOrderByExpression(field, expression)} as ${fieldName}`,
+            ]
+              .filter(Boolean)
+              .join(', ');
+
+            return {
+              ...resExpr,
+              [fieldName]: sortParams,
+            };
+          },
+          {},
+        );
+
+        return {
+          ...res,
+          ...(hasOriginalField ? { [field]: orderParams } : {}),
+          ...expressionFields,
+        };
+      },
+      {},
+    );
+
+    return [selectsWithExpressions, ordersWithExpressions];
+  }
+
+  /**
+   * Enable support order by expressions
+   * @see createOrderExpression
+   * @private
+   */
+  private enableOrderExpressions(qb: SelectQueryBuilder<TEntity>): void {
+    // save default clone function
+    const defaultClone = qb['clone'].bind(qb);
+
+    // save default create order by expression
+    qb['defaultCreateOrderByCombinedWithSelectExpression'] =
+      qb['createOrderByCombinedWithSelectExpression'].bind(qb);
+    qb['orderExpressions'] = this.orderExpressions;
+    qb['createOrderByCombinedWithSelectExpression'] = this.createOrderExpression.bind(qb);
+    // make sure what after clone we keep custom function
+    qb['clone'] = () => {
+      const newQb = defaultClone() as SelectQueryBuilder<TEntity>;
+
+      this.enableOrderExpressions(newQb);
+
+      return newQb;
+    };
+  }
+
+  /**
    * Enable lateral joins
    * @private
    */
@@ -569,11 +715,11 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     relations: IJsonRelationResult[],
   ): void {
     const { defaultRelationPageSize, defaultRelationMaxPageSize } = this.options;
+    // save default clone function
+    const defaultClone = qb['clone'].bind(qb);
 
     // save default create join function
     qb['defaultCreateJoinExpression'] = qb['createJoinExpression'].bind(qb);
-    // save default clone function
-    qb['defaultClone'] = qb['clone'].bind(qb);
     // save indexed relations by alias
     qb['relationsByAlias'] = relations.reduce(
       (res, relation) => ({
@@ -588,7 +734,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     qb['createJoinExpression'] = this.createJoinExpression.bind(qb);
     // make sure what after clone we keep custom function
     qb['clone'] = () => {
-      const newQb = qb['defaultClone']() as SelectQueryBuilder<TEntity>;
+      const newQb = defaultClone() as SelectQueryBuilder<TEntity>;
 
       this.enableLateralJoins(newQb, relations);
 
@@ -891,6 +1037,11 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     // lateral joins
     if (isLateralJoins) {
       this.enableLateralJoins(queryBuilder, relations);
+    }
+
+    // order by expressions
+    if (this.orderExpressions.size) {
+      this.enableOrderExpressions(queryBuilder);
     }
 
     return queryBuilder;

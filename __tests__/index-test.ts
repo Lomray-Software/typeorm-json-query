@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/no-duplicate-string */
 import type { IJsonQuery } from '@lomray/microservices-types';
 import {
   JQFieldType,
@@ -9,12 +10,19 @@ import {
 import { expect } from 'chai';
 import sinon from 'sinon';
 import type { Brackets } from 'typeorm';
+import { SelectQueryBuilder } from 'typeorm';
 import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
 import TypeormJsonQuery from '@src/index';
 
 describe('services/typeorm-json-query', () => {
+  const sandbox = sinon.createSandbox();
   const repository = TypeormMock.entityManager.getRepository(TestEntity);
+  const queryRunner = { release: sandbox.stub(), query: sandbox.stub().resolves({ records: [] }) };
+
+  // intercept queries
+  sandbox.stub(SelectQueryBuilder.prototype, 'obtainQueryRunner' as never).returns(queryRunner);
+
   const queryBuilder = repository.createQueryBuilder();
   const withAlias = (fields: string[] | string, alias = queryBuilder.alias) =>
     Array.isArray(fields)
@@ -73,7 +81,13 @@ describe('services/typeorm-json-query', () => {
     brackets.forEach((bracket) => bracket.whereFactory(qb));
   };
 
+  after(() => {
+    sandbox.restore();
+  });
+
   beforeEach(() => {
+    queryRunner.query.resetHistory();
+
     // reset query params count for a more accurate result
     emptyInstance['queryParamsCount'] = 0;
   });
@@ -254,21 +268,40 @@ describe('services/typeorm-json-query', () => {
     ]);
   });
 
-  it('should return orderBy with null transformation', () => {
+  it('should return orderBy with null transformation', async () => {
     const instance = TypeormJsonQuery.init({
       queryBuilder,
-      query: { orderBy: { id: { order: JQOrder.DESC, isEmptyToNull: true } } },
+      query: {
+        relations: ['testRelation'],
+        orderBy: {
+          id: {
+            order: JQOrder.DESC,
+            expression: { type: 'NULLIF', value: '' },
+            nulls: JQOrderNulls.last,
+          },
+          param: JQOrder.ASC,
+        },
+      },
     });
+
+    await instance.toQuery().getManyAndCount();
+
+    const query = queryRunner.query.firstCall.firstArg;
 
     expect(instance.getOrderBy()).to.deep.equal([
       {
         field: "NULLIF(TestEntity.id, '')",
-        nulls: undefined,
+        nulls: 'NULLS LAST',
         value: JQOrder.DESC,
       },
+      {
+        field: 'TestEntity.param',
+        nulls: undefined,
+        value: JQOrder.ASC,
+      },
     ]);
-    expect(instance.toQuery().getQuery()).to.equal(
-      `SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId" FROM "test_entity" "TestEntity" ORDER BY NULLIF("TestEntity"."id", '') DESC LIMIT 25`,
+    expect(query).to.equal(
+      `SELECT DISTINCT "distinctAlias"."TestEntity_id" as "ids_TestEntity_id", "distinctAlias"."TestEntity_param", "distinctAlias"."TestEntity_id", NULLIF("distinctAlias"."TestEntity_id", '') as "orderExpr1" FROM (SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId", "testRelation"."id" AS "testRelation_id", "testRelation"."demo" AS "testRelation_demo" FROM "test_entity" "TestEntity" LEFT JOIN "test_related_entity" "testRelation" ON "testRelation"."id"="TestEntity"."testRelationId") "distinctAlias" ORDER BY "distinctAlias"."TestEntity_param" ASC, "orderExpr1" DESC NULLS LAST, "TestEntity_id" ASC LIMIT 25`,
     );
   });
 
@@ -952,9 +985,9 @@ describe('services/typeorm-json-query', () => {
 
   it('should return query and disable select relations', () => {
     const qb = queryBuilder.clone();
-    const onlyJoin = sinon.spy(qb, 'leftJoin');
-    const joinAndSelect = sinon.spy(qb, 'leftJoinAndSelect');
-    const mockedQb = sinon.stub(queryBuilder, 'clone').returns(qb);
+    const onlyJoin = sandbox.spy(qb, 'leftJoin');
+    const joinAndSelect = sandbox.spy(qb, 'leftJoinAndSelect');
+    const mockedQb = sandbox.stub(queryBuilder, 'clone').returns(qb);
 
     TypeormJsonQuery.init({
       queryBuilder,
