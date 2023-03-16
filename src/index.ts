@@ -21,6 +21,13 @@ export interface ITypeormJsonQueryArgs<TEntity = ObjectLiteral> {
   authQuery?: { options?: Partial<ITypeormJsonQueryOptions>; query?: IJsonQuery<TEntity> };
 }
 
+export interface ITypeormRelationOptions {
+  name: string;
+  isSelect?: boolean;
+  isLateral?: boolean;
+  isDisabled?: boolean;
+}
+
 export interface ITypeormJsonQueryOptions {
   defaultPageSize: number;
   // 0 - disable (query all items), 200 - default value
@@ -34,8 +41,9 @@ export interface ITypeormJsonQueryOptions {
   /**
    *  E.g.: ['*'] - disable select relations (only join) or ['relation', { name: 'some-relation', isSelect: false, isLateral: true }]
    *  NOTE: by default DISABLE select provided relations
+   *  isDisable - disable relation for client side
    */
-  relationOptions?: ({ name: string; isSelect?: boolean; isLateral?: boolean } | string)[];
+  relationOptions?: (ITypeormRelationOptions | string)[];
   isDisableRelations?: boolean;
   isDisableAttributes?: boolean;
   isDisableOrderBy?: boolean;
@@ -359,6 +367,20 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Get relation options
+   * @protected
+   */
+  protected getRelationOptions(
+    name: string | number | symbol,
+    options: Record<string, Omit<ITypeormRelationOptions, 'name'>>,
+  ): Omit<ITypeormRelationOptions, 'name'> {
+    const relNameParts = String(name).split('.');
+    const relName = relNameParts[relNameParts.length - 1];
+
+    return options[`.${relName}`] ?? options[relName] ?? options['*'] ?? {};
+  }
+
+  /**
    * Get query relations
    */
   public getRelations(relations?: IJsonQuery<TEntity>['relations']): IJsonRelationResult[] {
@@ -369,98 +391,106 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         name,
         isSelect = false,
         isLateral = false,
+        isDisabled = false,
       } = typeof rel === 'object' && rel !== null ? rel : { name: rel };
 
       return {
-        [name]: { isSelect, isLateral },
+        [name]: { isSelect, isLateral, isDisabled },
         ...res,
       };
     }, {});
     const result: { [property: string]: IJsonRelationResult } = {};
+    const clientRelations = (isDisableRelations ? [] : this.query.relations ?? []).filter(
+      (relation) => {
+        const { name } =
+          typeof relation === 'object' && relation !== null ? relation : { name: relation };
+        const { isDisabled = false } = this.getRelationOptions(name, mapRelationOptions);
 
-    [
-      ...(isDisableRelations ? [] : this.query.relations ?? []),
-      ...(relations ?? []),
-      ...(this.authQuery.relations ?? []),
-    ].forEach((relation) => {
-      const {
-        name,
-        where,
-        page,
-        pageSize,
-        orderBy,
-        groupBy,
-        isLateral = false,
-        isSelect = true,
-      } = typeof relation === 'object' && relation !== null
-        ? relation
-        : {
-            name: relation,
-            where: null,
-            page: undefined,
-            pageSize: undefined,
-            orderBy: undefined,
-            groupBy: undefined,
-          };
-      const { isSelect: isAllowSelect = true, isLateral: isAllowLateral = true } =
-        mapRelationOptions[name as string] ?? mapRelationOptions['*'] ?? {};
+        return !isDisabled;
+      },
+    );
 
-      if (!name || typeof name !== 'string') {
-        throw new Error('Invalid json query: some relation has incorrect name.');
-      }
-
-      if (name.split('.').length > maxDeepRelation) {
-        throw new Error(`Invalid json query: relation "${name}" has reached maximum depth.`);
-      }
-
-      let whereCondition;
-      let whereParameters;
-      const alias = name.replace(/\./g, '_');
-      const property = this.withFieldAlias(name);
-
-      if (where) {
-        const relationWhere = this.queryBuilder.connection
-          .createQueryBuilder()
-          .from(name, alias)
-          .withDeleted() // we don't care about this (prevent duplicate)
-          .where((qb) => this.parseCondition(where, qb, alias));
-
-        [whereCondition, whereParameters] = TypeormJsonQuery.qbWhereParse(relationWhere);
-      }
-
-      const prevValues = result[property];
-
-      // only merge
-      if (prevValues) {
-        if (whereCondition) {
-          prevValues.where = [prevValues.where, whereCondition].join(' AND ');
-          prevValues.parameters = { ...prevValues.parameters, ...whereParameters };
-        }
-
-        if (groupBy) {
-          prevValues.query!.groupBy = [
-            ...new Set([...(prevValues.query?.groupBy ?? []), ...groupBy]),
-          ];
-        }
-
-        return;
-      }
-
-      result[property] = {
-        property,
-        alias,
-        where: whereCondition,
-        parameters: whereParameters,
-        isLateral: isAllowLateral ? isLateral : false,
-        isSelect: isAllowSelect ? isSelect : false,
-        query: {
+    [...clientRelations, ...(relations ?? []), ...(this.authQuery.relations ?? [])].forEach(
+      (relation) => {
+        const {
+          name,
+          where,
           page,
           pageSize,
           orderBy,
           groupBy,
-        },
-      };
-    });
+          isLateral = false,
+          isSelect = true,
+        } = typeof relation === 'object' && relation !== null
+          ? relation
+          : {
+              name: relation,
+              where: null,
+              page: undefined,
+              pageSize: undefined,
+              orderBy: undefined,
+              groupBy: undefined,
+            };
+        const { isSelect: isAllowSelect = true, isLateral: isAllowLateral = true } =
+          this.getRelationOptions(name, mapRelationOptions);
+
+        if (!name || typeof name !== 'string') {
+          throw new Error('Invalid json query: some relation has incorrect name.');
+        }
+
+        if (name.split('.').length > maxDeepRelation) {
+          throw new Error(`Invalid json query: relation "${name}" has reached maximum depth.`);
+        }
+
+        let whereCondition;
+        let whereParameters;
+        const alias = name.replace(/\./g, '_');
+        const property = this.withFieldAlias(name);
+
+        if (where) {
+          const relationWhere = this.queryBuilder.connection
+            .createQueryBuilder()
+            .from(name, alias)
+            .withDeleted() // we don't care about this (prevent duplicate)
+            .where((qb) => this.parseCondition(where, qb, alias));
+
+          [whereCondition, whereParameters] = TypeormJsonQuery.qbWhereParse(relationWhere);
+        }
+
+        const prevValues = result[property];
+
+        // only merge
+        if (prevValues) {
+          if (whereCondition) {
+            prevValues.where = [prevValues.where, whereCondition].join(' AND ');
+            prevValues.parameters = { ...prevValues.parameters, ...whereParameters };
+          }
+
+          if (groupBy) {
+            prevValues.query!.groupBy = [
+              ...new Set([...(prevValues.query?.groupBy ?? []), ...groupBy]),
+            ];
+          }
+
+          return;
+        }
+
+        result[property] = {
+          property,
+          alias,
+          where: whereCondition,
+          parameters: whereParameters,
+          isLateral: isAllowLateral ? isLateral : false,
+          isSelect: isAllowSelect ? isSelect : false,
+          query: {
+            page,
+            pageSize,
+            orderBy,
+            groupBy,
+          },
+        };
+      },
+    );
 
     return Object.values(result);
   }

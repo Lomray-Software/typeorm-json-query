@@ -481,6 +481,39 @@ describe('services/typeorm-json-query', () => {
     expect(rel[1].alias).to.equal('otherRelation');
   });
 
+  it('should empty relations: disabled specific relation', () => {
+    const instance = TypeormJsonQuery.init<TestEntity>(
+      {
+        queryBuilder,
+        // @ts-ignore
+        query: { relations: ['testRelation'] },
+      },
+      { relationOptions: [{ name: 'testRelation', isDisabled: true }] },
+    );
+
+    // @ts-ignore
+    const rel = instance.getRelations();
+
+    expect(rel.length).to.equal(0);
+  });
+
+  it('should empty relations: disabled specific relation - nested', () => {
+    const instance = TypeormJsonQuery.init<TestEntity>(
+      {
+        queryBuilder,
+        // @ts-ignore
+        query: { relations: ['testRelation', { name: 'profile.testRelation' }] },
+      },
+      { relationOptions: [{ name: '.testRelation', isDisabled: true }] },
+    );
+
+    // @ts-ignore
+    const rel = instance.getRelations(['myRelation']);
+
+    expect(rel.length).to.equal(1);
+    expect(rel[0].alias).to.equal('myRelation');
+  });
+
   it('should success return relations', () => {
     const relations = commonInstance.getRelations();
 
