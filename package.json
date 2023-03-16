@@ -37,11 +37,11 @@
 		"prepare": "husky install"
 	},
 	"dependencies": {
-		"@lomray/microservices-types": "^1.9.1"
+		"@lomray/microservices-types": "^1.10.0"
 	},
 	"devDependencies": {
-		"@commitlint/cli": "^17.4.2",
-		"@commitlint/config-conventional": "^17.4.2",
+		"@commitlint/cli": "^17.4.4",
+		"@commitlint/config-conventional": "^17.4.4",
 		"@istanbuljs/nyc-config-typescript": "^1.0.2",
 		"@lomray/eslint-config": "^2.0.2",
 		"@lomray/prettier-config": "^1.2.0",

@@ -414,23 +414,28 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       (relation) => {
         const {
           name,
+          as,
           where,
           page,
           pageSize,
           orderBy,
           groupBy,
+          isSelect,
           isLateral = false,
-          isSelect = true,
         } = typeof relation === 'object' && relation !== null
           ? relation
           : {
               name: relation,
+              as: undefined,
               where: null,
               page: undefined,
               pageSize: undefined,
               orderBy: undefined,
               groupBy: undefined,
+              isSelect: undefined,
             };
+        // if isSelect not provided and relation renamed, disable select by default
+        const isSelectUser = isSelect === undefined ? !as : isSelect;
         const { isSelect: isAllowSelect = true, isLateral: isAllowLateral = true } =
           this.getRelationOptions(name, mapRelationOptions);
 
@@ -444,8 +449,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
         let whereCondition;
         let whereParameters;
-        const alias = name.replace(/\./g, '_');
+        const alias = as ?? name.replace(/\./g, '_');
         const property = this.withFieldAlias(name);
+        const uqKey = `${property}|${alias}`;
 
         if (where) {
           const relationWhere = this.queryBuilder.connection
@@ -457,7 +463,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
           [whereCondition, whereParameters] = TypeormJsonQuery.qbWhereParse(relationWhere);
         }
 
-        const prevValues = result[property];
+        const prevValues = result[uqKey];
 
         // only merge
         if (prevValues) {
@@ -475,13 +481,13 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
           return;
         }
 
-        result[property] = {
+        result[uqKey] = {
           property,
           alias,
           where: whereCondition,
           parameters: whereParameters,
           isLateral: isAllowLateral ? isLateral : false,
-          isSelect: isAllowSelect ? isSelect : false,
+          isSelect: isAllowSelect ? isSelectUser : false,
           query: {
             page,
             pageSize,

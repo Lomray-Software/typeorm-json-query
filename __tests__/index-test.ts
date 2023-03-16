@@ -528,6 +528,33 @@ describe('services/typeorm-json-query', () => {
     ]);
   });
 
+  it('should success return renamed relations', () => {
+    const instance = TypeormJsonQuery.init<TestEntity>({
+      queryBuilder,
+      query: { relations: [{ name: 'testRelation', as: 'renamed', where: { id: 2 } }] },
+    });
+
+    expect(instance.getRelations(['testRelation'])).to.deep.equal([
+      {
+        property: withAlias(commonRelations?.[0] as string),
+        alias: 'renamed',
+        parameters: {
+          'renamed.id_1': 2,
+        },
+        where: 'renamed.id = :renamed.id_1',
+        ...defaultRelationQuery,
+        isSelect: false,
+      },
+      {
+        property: withAlias(commonRelations?.[0] as string),
+        alias: commonRelations?.[0],
+        where: undefined,
+        parameters: undefined,
+        ...defaultRelationQuery,
+      },
+    ]);
+  });
+
   it('should disable select relation: testRelation', () => {
     const instance = TypeormJsonQuery.init<TestEntity>({
       queryBuilder,
