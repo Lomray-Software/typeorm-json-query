@@ -32,6 +32,7 @@ export interface ITypeormJsonQueryOptions {
   defaultPageSize: number;
   // 0 - disable (query all items), 200 - default value
   maxPageSize: number;
+  maxRelations: number;
   // level1.level2.level3.etc...
   maxDeepRelation: number;
   // { and: [{ and: [{ and: [] }]}] } deep condition level
@@ -102,6 +103,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   private readonly options: ITypeormJsonQueryOptions = {
     defaultPageSize: 25,
     maxPageSize: 100,
+    maxRelations: 10,
     maxDeepRelation: 4,
     maxDeepWhere: 5,
     defaultRelationPageSize: 50,
@@ -384,7 +386,11 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    * Get query relations
    */
   public getRelations(relations?: IJsonQuery<TEntity>['relations']): IJsonRelationResult[] {
-    const { maxDeepRelation, isDisableRelations, relationOptions } = this.options;
+    const { maxRelations, maxDeepRelation, isDisableRelations, relationOptions } = this.options;
+
+    if ((this.query.relations?.length ?? 0) > maxRelations) {
+      throw new Error(`Invalid json query: reached maximum relations (${maxRelations}).`);
+    }
 
     const mapRelationOptions = relationOptions!.reduce((res, rel) => {
       const {

@@ -514,6 +514,21 @@ describe('services/typeorm-json-query', () => {
     expect(rel[0].alias).to.equal('myRelation');
   });
 
+  it('should throw error: reached maximum relation', () => {
+    const instance = TypeormJsonQuery.init<TestEntity>(
+      {
+        queryBuilder,
+        // @ts-ignore
+        query: { relations: ['testRelation', { name: 'testRelation2' }] },
+      },
+      { maxRelations: 1 },
+    );
+
+    expect(() => instance.getRelations()).to.throw(
+      'Invalid json query: reached maximum relations (1).',
+    );
+  });
+
   it('should success return relations', () => {
     const relations = commonInstance.getRelations();
 
