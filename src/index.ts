@@ -406,13 +406,24 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       };
     }, {});
     const result: { [property: string]: IJsonRelationResult } = {};
+    // key auth relation by 'as'
+    const authRelationRenames =
+      this.authQuery.relations?.reduce(
+        (res, rel) => ({
+          ...res,
+          [typeof rel === 'object' ? rel?.as ?? '-' : '-']: true,
+        }),
+        {},
+      ) ?? {};
     const clientRelations = (isDisableRelations ? [] : this.query.relations ?? []).filter(
       (relation) => {
-        const { name } =
-          typeof relation === 'object' && relation !== null ? relation : { name: relation };
+        const { name, as = 'default' } =
+          typeof relation === 'object' && relation !== null
+            ? relation
+            : { name: relation, as: undefined };
         const { isDisabled = false } = this.getRelationOptions(name, mapRelationOptions);
 
-        return !isDisabled;
+        return !isDisabled && !authRelationRenames[as];
       },
     );
 

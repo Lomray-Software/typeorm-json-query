@@ -529,6 +529,36 @@ describe('services/typeorm-json-query', () => {
     );
   });
 
+  it('should disable client rename relation, if the auth relation has the same name', () => {
+    const instance = TypeormJsonQuery.init<TestEntity>(
+      {
+        queryBuilder,
+        query: {
+          relations: [{ name: 'testRelation', as: 'renamed', isSelect: true, where: { id: 1 } }],
+        },
+        authQuery: {
+          query: {
+            relations: [{ name: 'testRelation', as: 'renamed', isSelect: false, where: { id: 2 } }],
+          },
+        },
+      },
+      { maxRelations: 1 },
+    );
+
+    expect(instance.getRelations()).to.deep.equal([
+      {
+        property: withAlias(commonRelations?.[0] as string),
+        alias: 'renamed',
+        where: 'renamed.id = :renamed.id_1',
+        parameters: {
+          'renamed.id_1': 2,
+        },
+        ...defaultRelationQuery,
+        isSelect: false,
+      },
+    ]);
+  });
+
   it('should success return relations', () => {
     const relations = commonInstance.getRelations();
 
