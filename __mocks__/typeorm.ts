@@ -36,7 +36,7 @@ const fakeConnection = getConnectionManager().create({
 });
 
 // @ts-ignore
-fakeConnection.buildMetadatas();
+void fakeConnection.buildMetadatas();
 
 // @ts-ignore
 // eslint-disable-next-line @typescript-eslint/unbound-method
