@@ -16,6 +16,7 @@ coverage
 .lintstagedrc.js
 .mocharc.js
 .prettierrc.js
+.nvmrc
 commitlint.config.js
 nyc.config.js
 rollup.config.js

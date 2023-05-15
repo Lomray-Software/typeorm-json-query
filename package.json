@@ -37,43 +37,43 @@
 		"prepare": "husky install"
 	},
 	"dependencies": {
-		"@lomray/microservices-types": "^1.10.0"
+		"@lomray/microservices-types": "^1.12.0"
 	},
 	"devDependencies": {
-		"@commitlint/cli": "^17.4.4",
-		"@commitlint/config-conventional": "^17.4.4",
+		"@commitlint/cli": "^17.6.3",
+		"@commitlint/config-conventional": "^17.6.3",
 		"@istanbuljs/nyc-config-typescript": "^1.0.2",
-		"@lomray/eslint-config": "^2.0.2",
+		"@lomray/eslint-config": "^3.0.0",
 		"@lomray/prettier-config": "^1.2.0",
-		"@semantic-release/npm": "^9.0.2",
-		"@types/chai": "^4.3.4",
+		"@semantic-release/npm": "^10.0.3",
+		"@types/chai": "^4.3.5",
 		"@types/mocha": "^10.0.1",
-		"@types/node": "^18.11.18",
-		"@types/sinon": "^10.0.13",
+		"@types/node": "^18.13.0",
+		"@types/sinon": "^10.0.15",
 		"@types/sinon-chai": "^3.2.9",
 		"chai": "^4.3.7",
-		"eslint": "^8.32.0",
-		"eslint-config-prettier": "^8.6.0",
+		"eslint": "^8.40.0",
+		"eslint-config-prettier": "^8.8.0",
 		"eslint-plugin-prettier": "^4.2.1",
 		"husky": "^8.0.3",
-		"lint-staged": "^13.1.0",
+		"lint-staged": "^13.2.2",
 		"mocha": "^10.2.0",
 		"nyc": "^15.1.0",
-		"pg": "^8.8.0",
-		"prettier": "^2.8.3",
-		"rewiremock": "^3.14.4",
+		"pg": "^8.10.0",
+		"prettier": "^2.8.8",
+		"rewiremock": "^3.14.5",
 		"rollup": "^2.79.1",
-		"rollup-plugin-ts": "^3.1.1",
-		"semantic-release": "^20.1.0",
-		"sinon": "^15.0.1",
+		"rollup-plugin-ts": "^3.2.0",
+		"semantic-release": "^21.0.2",
+		"sinon": "^15.0.4",
 		"sinon-chai": "^3.7.0",
 		"ts-node": "^10.9.1",
-		"tsconfig-paths": "^4.1.2",
+		"tsconfig-paths": "^4.2.0",
 		"ttypescript": "^1.5.15",
 		"typescript": "^4.7.4"
 	},
 	"peerDependencies": {
-		"typeorm": "^0.2.38"
+		"typeorm": "^0.2.41"
 	},
 	"bundledDependencies": [
 		"tslib"
