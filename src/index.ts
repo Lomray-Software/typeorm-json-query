@@ -235,7 +235,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         );
       }
 
-      // Build ijson query attribute attribute
+      // Build ijson query attribute
       const attribute = {
         name: this.withFieldAlias((typeof field === 'object' ? field.name : field) as string),
         isDistinct:
