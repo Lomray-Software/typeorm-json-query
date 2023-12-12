@@ -379,12 +379,27 @@ describe('services/typeorm-json-query', () => {
     expect(result.getQuery()).to.not.include('DISTINCT');
   });
 
-  it('should correctly build select params when distinct attributes is exist', () => {
-    const result = emptyInstance.toQuery({
+  it('should correctly build select params when distinct attributes is exist for all distinct type', () => {
+    const result = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.ALL },
+    ).toQuery({
       attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
     });
 
-    expect(result.getQuery()).to.include('DISTINCT ON');
+    expect(result.getQuery()).to.not.include('DISTINCT ON');
+    expect(result.getQuery()).to.include('DISTINCT');
+  });
+
+  it('should correctly build select and ignore provided distinct when distinct option is disabled', () => {
+    const result = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.DISABLED },
+    ).toQuery({
+      attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
+    });
+
+    expect(result.getQuery()).to.not.include('DISTINCT');
   });
 
   it('should correctly build select and ignore provided distinct when distinct option is disabled', () => {
@@ -1368,5 +1383,33 @@ describe('services/typeorm-json-query', () => {
     expect(() => qbResult.toQuery()).to.throw(
       'Invalid json query: field value type or value is invalid.',
     );
+  });
+
+  it('should throw error on apply select with distinct if distinct disabled', () => {
+    const qb = repository.createQueryBuilder();
+    const instance = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.DISABLED },
+    );
+
+    expect(() =>
+      instance['applyDistinctSelectToQuery'](qb, [
+        { name: 'id' },
+        { name: 'param', isDistinct: true },
+      ]),
+    ).to.throw('Invalid json query: distinct type.');
+  });
+
+  it('should correctly apply select with all distinct', () => {
+    const qb = repository.createQueryBuilder();
+    const instance = TypeormJsonQuery.init({ queryBuilder }, { distinctType: DistinctType.ALL });
+
+    instance['applyDistinctSelectToQuery'](qb, [
+      { name: 'id' },
+      { name: 'param', isDistinct: true },
+    ]);
+
+    expect(qb.getQuery()).to.include('DISTINCT');
+    expect(qb.getQuery()).to.not.include('DISTINCT ON');
   });
 });
