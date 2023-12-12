@@ -1079,17 +1079,19 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       throw new Error('Invalid json query: distinct type.');
     }
 
-    const selectFields: string[] = [];
-    const distinctFields: string[] = [];
-
     // Build sql select with distinct
-    attributes.forEach(({ name, isDistinct }) => {
-      selectFields.push(name as string);
+    const { selectFields, distinctFields } = attributes.reduce(
+      (res, { name, isDistinct }) => {
+        res.selectFields.push(name as string);
 
-      if (isDistinct) {
-        distinctFields.push(name as string);
-      }
-    });
+        if (isDistinct) {
+          res.distinctFields.push(name as string);
+        }
+
+        return res;
+      },
+      { selectFields: [] as string[], distinctFields: [] as string[] },
+    );
 
     // Apply select
     query.select(selectFields);
