@@ -191,6 +191,11 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       throw new Error('Invalid json query: page size.');
     }
 
+    // Distinct accepts entity field name as string or should not exist
+    if (!['string', 'undefined'].includes(typeof query.distinct) || query.distinct === null) {
+      throw new Error('Invalid json query: page size.');
+    }
+
     return query;
   }
 
