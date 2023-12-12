@@ -376,7 +376,9 @@ describe('services/typeorm-json-query', () => {
       attributes: ['id', 'param'],
     });
 
-    expect(result.getQuery()).to.not.include('DISTINCT');
+    expect(result.getQuery()).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
   });
 
   it('should correctly build select params when distinct attributes is exist for all distinct type', () => {
@@ -387,8 +389,9 @@ describe('services/typeorm-json-query', () => {
       attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
     });
 
-    expect(result.getQuery()).to.not.include('DISTINCT ON');
-    expect(result.getQuery()).to.include('DISTINCT');
+    expect(result.getQuery()).to.equal(
+      'SELECT DISTINCT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
   });
 
   it('should correctly build select and ignore provided distinct when distinct option is disabled', () => {
@@ -1409,7 +1412,27 @@ describe('services/typeorm-json-query', () => {
       { name: 'param', isDistinct: true },
     ]);
 
-    expect(qb.getQuery()).to.include('DISTINCT');
-    expect(qb.getQuery()).to.not.include('DISTINCT ON');
+    expect(qb.getQueryAndParameters()).to.deep.equal([
+      'SELECT DISTINCT id, param FROM "test_entity" "TestEntity"',
+      [],
+    ]);
+  });
+
+  it('should correctly apply select with postgres distinct', () => {
+    const qb = repository.createQueryBuilder();
+    const instance = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.POSTGRES },
+    );
+
+    instance['applyDistinctSelectToQuery'](qb, [
+      { name: 'id' },
+      { name: 'param', isDistinct: true },
+    ]);
+
+    expect(qb.getQueryAndParameters()).to.deep.equal([
+      'SELECT DISTINCT ON (param) id, param FROM "test_entity" "TestEntity"',
+      [],
+    ]);
   });
 });
