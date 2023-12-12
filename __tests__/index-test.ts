@@ -165,17 +165,30 @@ describe('services/typeorm-json-query', () => {
     // @ts-ignore
     const res = instance.getAttributes(['param2']);
 
-    expect(res).to.deep.equal(['TestEntity.param2', 'TestEntity.param']);
+    expect(res).to.deep.equal([
+      {
+        isDistinct: false,
+        name: 'TestEntity.param2',
+      },
+      {
+        isDistinct: false,
+        name: 'TestEntity.param',
+      },
+    ]);
   });
 
   it('should return attributes with aliases', () => {
     const attributes = commonInstance.getAttributes();
 
+    const expected = withAlias([
+      ...(commonQueryAttributes as string[]),
+      ...(commonAuthQueryAttributes as string[]),
+    ]);
+
     expect(attributes).to.deep.equal(
-      withAlias([
-        ...(commonQueryAttributes as string[]),
-        ...(commonAuthQueryAttributes as string[]),
-      ]),
+      typeof expected === 'string'
+        ? { name: expected }
+        : expected.map((name) => ({ name, isDistinct: false })),
     );
   });
 
@@ -183,11 +196,15 @@ describe('services/typeorm-json-query', () => {
     const attr = `${queryBuilder.alias}.param` as unknown as 'param'; // attribute with alias
     const attributes = commonInstance.getAttributes([attr]);
 
+    const expected = withAlias([
+      ...(commonQueryAttributes as string[]),
+      ...(commonAuthQueryAttributes as string[]),
+    ]);
+
     expect(attributes).to.deep.equal(
-      withAlias([
-        ...(commonQueryAttributes as string[]),
-        ...(commonAuthQueryAttributes as string[]),
-      ]),
+      typeof expected === 'string'
+        ? { name: expected }
+        : expected.map((name) => ({ name, isDistinct: false })),
     );
   });
 
@@ -196,7 +213,9 @@ describe('services/typeorm-json-query', () => {
       // @ts-ignore
       const result = () => commonInstance.getAttributes([type]);
 
-      expect(result).to.throw('some attribute has incorrect name');
+      expect(result).to.throw(
+        'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
+      );
     }
   });
 
@@ -204,12 +223,14 @@ describe('services/typeorm-json-query', () => {
     // @ts-ignore
     const attributes = commonInstance.getAttributes(['id', 'rel1.id', 'rel1.rel2.id']);
 
-    expect(attributes).to.deep.equal([
-      ...withAlias([...(commonQueryAttributes as string[])]),
-      'rel1.id',
-      'rel1_rel2.id',
-      ...withAlias([...(commonAuthQueryAttributes as string[])]),
-    ]);
+    expect(attributes).to.deep.equal(
+      [
+        ...withAlias([...(commonQueryAttributes as string[])]),
+        'rel1.id',
+        'rel1_rel2.id',
+        ...withAlias([...(commonAuthQueryAttributes as string[])]),
+      ].map((name) => ({ name, isDistinct: false })),
+    );
   });
 
   it('should return empty group by: disable group by', () => {

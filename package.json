@@ -37,7 +37,7 @@
 		"prepare": "husky install"
 	},
 	"dependencies": {
-		"@lomray/microservices-types": "^1.14.0"
+		"@lomray/microservices-types": "^1.15.0"
 	},
 	"devDependencies": {
 		"@commitlint/cli": "^18.4.3",
@@ -70,9 +70,11 @@
 		"ts-node": "^10.9.1",
 		"tsconfig-paths": "^4.2.0",
 		"ttypescript": "^1.5.15",
-		"typescript": "^4.7.4"
-	},
+		"typescript": "^4.7.4",
+    "@types/lodash": "^4.14.202"
+  },
 	"peerDependencies": {
+    "lodash": "^4.17.21",
 		"typeorm": "0.2.41"
 	},
 	"bundledDependencies": [

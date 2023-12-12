@@ -1,5 +1,6 @@
 import type {
   IJsonQuery,
+  IJsonQueryAttribute,
   IJsonQueryOrderField,
   IJsonQueryWhere,
   ObjectLiteral,
@@ -12,6 +13,7 @@ import {
   JQOrder,
   JQOrderNulls,
 } from '@lomray/microservices-types';
+import _ from 'lodash';
 import type { SelectQueryBuilder, WhereExpressionBuilder } from 'typeorm';
 import { Brackets } from 'typeorm';
 
@@ -28,6 +30,12 @@ export interface ITypeormRelationOptions {
   isDisabled?: boolean;
 }
 
+export enum DistinctType {
+  DISABLED = 'disabled',
+  POSTGRES = 'postgres', // Apply postrges distinct on
+  ALL = 'all', //Apply RDB distinct
+}
+
 export interface ITypeormJsonQueryOptions {
   defaultPageSize: number;
   // 0 - disable (query all items), 200 - default value
@@ -39,6 +47,7 @@ export interface ITypeormJsonQueryOptions {
   maxDeepWhere: number;
   defaultRelationPageSize: number;
   defaultRelationMaxPageSize: number;
+  distinctType: DistinctType; // Default - disabled
   /**
    *  E.g.: ['*'] - disable select relations (only join) or ['relation', { name: 'some-relation', isSelect: false, isLateral: true }]
    *  NOTE: by default DISABLE select provided relations
@@ -114,6 +123,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     isDisableOrderBy: false,
     isDisableGroupBy: false,
     isDisablePagination: false,
+    distinctType: DistinctType.POSTGRES,
     isLateralJoins: true,
   };
 
@@ -191,11 +201,6 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       throw new Error('Invalid json query: page size.');
     }
 
-    // Distinct accepts entity field name as string or should not exist
-    if (!['string', 'undefined'].includes(typeof query.distinct) || query.distinct === null) {
-      throw new Error('Invalid json query: page size.');
-    }
-
     return query;
   }
 
@@ -217,22 +222,31 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   /**
    * Get query attributes
    */
-  public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): string[] {
-    const { isDisableAttributes } = this.options;
+  public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): IJsonQueryAttribute[] {
+    const { isDisableAttributes, distinctType } = this.options;
 
     const attributes = [
       ...(isDisableAttributes ? [] : this.query.attributes ?? []),
       ...attrs,
       ...(this.authQuery.attributes || []),
     ].map((field) => {
-      if (!field || typeof field !== 'string') {
-        throw new Error('Invalid json query: some attribute has incorrect name.');
+      if (!field || (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))) {
+        throw new Error(
+          'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
+        );
       }
 
-      return this.withFieldAlias(field);
+      return {
+        name: this.withFieldAlias((typeof field === 'object' ? field.name : field) as string),
+        // If disabled distinct in options or provided attributes is string
+        isDistinct:
+          distinctType === DistinctType.DISABLED || typeof field === 'string'
+            ? false
+            : Boolean(field?.isDistinct),
+      };
     });
 
-    return [...new Set(attributes)];
+    return _.uniqBy(attributes, 'name');
   }
 
   /**
@@ -1047,6 +1061,49 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Apply distinct select to query
+   */
+  private applyDistinctSelectToQuery(
+    query: SelectQueryBuilder<TEntity>,
+    attributes: IJsonQueryAttribute[],
+  ): void {
+    const { distinctType } = this.options;
+
+    // Validate distinct type
+    if (!distinctType || distinctType === DistinctType.DISABLED) {
+      throw new Error('Invalid json query: distinct type.');
+    }
+
+    const selectFields: string[] = [];
+    const distinctFields: string[] = [];
+
+    // Build sql select with distinct
+    attributes.forEach(({ name, isDistinct }) => {
+      selectFields.push(name as string);
+
+      if (isDistinct) {
+        distinctFields.push(name as string);
+      }
+    });
+
+    // Apply select
+    query.select(selectFields);
+
+    // Apply distinct
+    if (!distinctFields.length) {
+      return;
+    }
+
+    if (distinctType === DistinctType.ALL) {
+      query.distinct(true);
+
+      return;
+    }
+
+    query.distinctOn(distinctFields);
+  }
+
+  /**
    * Convert json query to typeorm condition
    */
   public toQuery({
@@ -1058,15 +1115,16 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     page,
     pageSize,
   }: IJsonQuery<TEntity> = {}): ITypeormJsonQueryArgs<TEntity>['queryBuilder'] {
-    const { isDisablePagination, isLateralJoins } = this.options;
+    const { isDisablePagination, isLateralJoins, distinctType } = this.options;
     const { page: queryPage, pageSize: queryPageSize } = this.query;
 
     const queryBuilder = this.queryBuilder.clone();
-    const select = this.getAttributes(attributes);
+    const selectAttributes = this.getAttributes(attributes);
     const relations = this.getRelations(extraRelations);
     const conditions = this.getWhere(where);
     const sorting = this.getOrderBy(orderBy);
     const groupByAttr = this.getGroupBy(groupBy);
+    const isDistinctAttributesExist = selectAttributes.some(({ isDistinct }) => isDistinct);
 
     sorting.forEach(({ field, value, nulls }) => queryBuilder.addOrderBy(field, value, nulls));
     relations.forEach(({ property, alias, where: relationWhere, parameters, isSelect }) =>
@@ -1080,8 +1138,11 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     conditions.forEach((condition) => queryBuilder.andWhere(condition));
     groupByAttr.forEach((field) => queryBuilder.addGroupBy(field));
 
-    if (select.length) {
-      queryBuilder.select(select);
+    if (selectAttributes.length) {
+      // Build distinct only if enabled distinct and distinct attributes exists
+      distinctType !== DistinctType.DISABLED && isDistinctAttributesExist
+        ? this.applyDistinctSelectToQuery(queryBuilder, selectAttributes)
+        : queryBuilder.select(selectAttributes.map(({ name }) => name as string));
     }
 
     // pagination
