@@ -33,7 +33,7 @@ export interface ITypeormRelationOptions {
 export enum DistinctType {
   DISABLED = 'disabled',
   POSTGRES = 'postgres', // Apply postrges distinct on
-  ALL = 'all', //Apply RDB distinct
+  ALL = 'all', // Apply RDB distinct
 }
 
 export interface ITypeormJsonQueryOptions {
