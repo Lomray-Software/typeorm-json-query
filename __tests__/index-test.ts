@@ -178,7 +178,11 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should return only unique attributes', () => {
-    const duplicatedAttributes = [...new Array(5).fill({ name: 'id' }), { name: 'param' }];
+    const duplicatedAttributes = [
+      ...new Array(5).fill({ name: 'id' }),
+      { name: 'param' },
+      { name: 'param' },
+    ];
     const instance = TypeormJsonQuery.init(
       {
         queryBuilder,

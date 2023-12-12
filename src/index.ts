@@ -13,7 +13,6 @@ import {
   JQOrder,
   JQOrderNulls,
 } from '@lomray/microservices-types';
-import _ from 'lodash';
 import type { SelectQueryBuilder, WhereExpressionBuilder } from 'typeorm';
 import { Brackets } from 'typeorm';
 
@@ -225,28 +224,37 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): IJsonQueryAttribute[] {
     const { isDisableAttributes, distinctType } = this.options;
 
-    const attributes = [
-      ...(isDisableAttributes ? [] : this.query.attributes ?? []),
+    return [
+      ...(isDisableAttributes ? [] : this.query.attributes || []),
       ...attrs,
       ...(this.authQuery.attributes || []),
-    ].map((field) => {
+    ].reduce((iJsonQueryAttributes: IJsonQueryAttribute[], field) => {
       if (!field || (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))) {
         throw new Error(
           'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
         );
       }
 
-      return {
+      // Build ijson query attribute attribute
+      const attribute = {
         name: this.withFieldAlias((typeof field === 'object' ? field.name : field) as string),
-        // If disabled distinct in options or provided attributes is string
         isDistinct:
           distinctType === DistinctType.DISABLED || typeof field === 'string'
             ? false
             : Boolean(field?.isDistinct),
       };
-    });
 
-    return _.uniqBy(attributes, 'name');
+      // Get only unique attributes
+      const existingAttribute = iJsonQueryAttributes.find(
+        ({ name: iJsonQueryAttributeName }) => iJsonQueryAttributeName === attribute.name,
+      );
+
+      if (!existingAttribute) {
+        iJsonQueryAttributes.push(attribute as IJsonQueryAttribute);
+      }
+
+      return iJsonQueryAttributes;
+    }, []);
   }
 
   /**
