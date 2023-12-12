@@ -224,37 +224,34 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): IJsonQueryAttribute[] {
     const { isDisableAttributes, distinctType } = this.options;
 
-    return [
-      ...(isDisableAttributes ? [] : this.query.attributes || []),
-      ...attrs,
-      ...(this.authQuery.attributes || []),
-    ].reduce((iJsonQueryAttributes: IJsonQueryAttribute[], field) => {
-      if (!field || (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))) {
-        throw new Error(
-          'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
+    return Object.values(
+      [
+        ...(isDisableAttributes ? [] : this.query.attributes || []),
+        ...attrs,
+        ...(this.authQuery.attributes || []),
+      ].reduce((res: object, field) => {
+        if (!field || (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))) {
+          throw new Error(
+            'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
+          );
+        }
+
+        const fieldName = this.withFieldAlias(
+          (typeof field === 'object' ? field.name : field) as string,
         );
-      }
 
-      // Build ijson query attribute
-      const attribute = {
-        name: this.withFieldAlias((typeof field === 'object' ? field.name : field) as string),
-        isDistinct:
-          distinctType === DistinctType.DISABLED || typeof field === 'string'
-            ? false
-            : Boolean(field?.isDistinct),
-      };
-
-      // Get only unique attributes
-      const existingAttribute = iJsonQueryAttributes.find(
-        ({ name: iJsonQueryAttributeName }) => iJsonQueryAttributeName === attribute.name,
-      );
-
-      if (!existingAttribute) {
-        iJsonQueryAttributes.push(attribute as IJsonQueryAttribute);
-      }
-
-      return iJsonQueryAttributes;
-    }, []);
+        return {
+          ...res,
+          [fieldName]: {
+            name: fieldName,
+            isDistinct:
+              distinctType === DistinctType.DISABLED || typeof field === 'string'
+                ? false
+                : Boolean(field?.isDistinct),
+          },
+        };
+      }, {}),
+    );
   }
 
   /**
