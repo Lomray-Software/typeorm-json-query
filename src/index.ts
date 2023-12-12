@@ -1080,7 +1080,10 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     }
 
     // Build sql select with distinct
-    const { selectFields, distinctFields } = attributes.reduce(
+    const { selectFields, distinctFields } = attributes.reduce<{
+      selectFields: string[];
+      distinctFields: string[];
+    }>(
       (res, { name, isDistinct }) => {
         res.selectFields.push(name as string);
 
@@ -1090,7 +1093,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
         return res;
       },
-      { selectFields: [] as string[], distinctFields: [] as string[] },
+      { selectFields: [], distinctFields: [] },
     );
 
     // Apply select
