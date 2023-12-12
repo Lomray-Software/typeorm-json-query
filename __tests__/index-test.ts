@@ -13,7 +13,7 @@ import type { Brackets } from 'typeorm';
 import { SelectQueryBuilder } from 'typeorm';
 import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
-import TypeormJsonQuery from '@src/index';
+import TypeormJsonQuery, { DistinctType } from '@src/index';
 
 describe('services/typeorm-json-query', () => {
   const sandbox = sinon.createSandbox();
@@ -1086,6 +1086,107 @@ describe('services/typeorm-json-query', () => {
 
     expect(qbResult).to.equal(
       'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param", "TestEntity"."testRelationId" AS "TestEntity_testRelationId" FROM "test_entity" "TestEntity" WHERE ("TestEntity"."id" = :TestEntity.id_1) AND ("TestEntity"."param" = :TestEntity.param_2) GROUP BY "TestEntity"."id" ORDER BY "TestEntity"."id" ASC LIMIT 25',
+    );
+  });
+
+  it('should return query with postres distinct on param with literal and ijson query attributes', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: { attributes: ['id', { name: 'param', isDistinct: true }] },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT DISTINCT ON ("TestEntity"."param") "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should return query with without distinct for ijson query attributes', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: { attributes: [{ name: 'id' }, { name: 'param' }] },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should return query with postres distinct on param', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: { attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }] },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT DISTINCT ON ("TestEntity"."param") "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should return query with postres distinct on id and param', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: {
+        attributes: [
+          { name: 'id', isDistinct: true },
+          { name: 'param', isDistinct: true },
+        ],
+      },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT DISTINCT ON ("TestEntity"."id", "TestEntity"."param") "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should return query with all RDB distinct', () => {
+    const attributesData = [
+      [{ name: 'id' }, { name: 'param', isDistinct: true }],
+      [{ name: 'id', isDistinct: true }, { name: 'param' }],
+      [
+        { name: 'id', isDistinct: true },
+        { name: 'param', isDistinct: true },
+      ],
+    ];
+
+    for (const attributes of attributesData) {
+      const qbResult = TypeormJsonQuery.init(
+        {
+          queryBuilder,
+          // @ts-ignore
+          query: { attributes },
+        },
+        { distinctType: DistinctType.ALL },
+      )
+        .toQuery()
+        .getQuery();
+
+      expect(qbResult).to.equal(
+        'SELECT DISTINCT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+      );
+    }
+  });
+
+  it('should return query with disabled distinct on param', () => {
+    const qbResult = TypeormJsonQuery.init(
+      {
+        queryBuilder,
+        query: { attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }] },
+      },
+      { distinctType: DistinctType.DISABLED },
+    )
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
     );
   });
 
