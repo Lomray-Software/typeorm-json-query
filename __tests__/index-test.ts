@@ -177,6 +177,31 @@ describe('services/typeorm-json-query', () => {
     ]);
   });
 
+  it('should return only unique attributes', () => {
+    const duplicatedAttributes = [...new Array(5).fill({ name: 'id' }), { name: 'param' }];
+    const instance = TypeormJsonQuery.init(
+      {
+        queryBuilder,
+        query: { attributes: duplicatedAttributes },
+      },
+      { isDisableAttributes: true },
+    );
+
+    // @ts-ignore
+    const res = instance.getAttributes(duplicatedAttributes);
+
+    expect(res).to.deep.equal([
+      {
+        isDistinct: false,
+        name: 'TestEntity.id',
+      },
+      {
+        isDistinct: false,
+        name: 'TestEntity.param',
+      },
+    ]);
+  });
+
   it('should return attributes with aliases', () => {
     const attributes = commonInstance.getAttributes();
 
