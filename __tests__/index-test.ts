@@ -371,6 +371,33 @@ describe('services/typeorm-json-query', () => {
     ]);
   });
 
+  it('should correctly build select params when distinct attributes is empty', () => {
+    const result = emptyInstance.toQuery({
+      attributes: ['id', 'param'],
+    });
+
+    expect(result.getQuery()).to.not.include('DISTINCT');
+  });
+
+  it('should correctly build select params when distinct attributes is exist', () => {
+    const result = emptyInstance.toQuery({
+      attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
+    });
+
+    expect(result.getQuery()).to.include('DISTINCT ON');
+  });
+
+  it('should correctly build select and ignore provided distinct when distinct option is disabled', () => {
+    const result = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.DISABLED },
+    ).toQuery({
+      attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
+    });
+
+    expect(result.getQuery()).to.not.include('DISTINCT');
+  });
+
   it('should throw error orderBy: validation failed', () => {
     const cases = [
       null,
