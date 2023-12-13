@@ -76,6 +76,12 @@ export interface IJsonRelationResult {
   isSelect?: boolean;
 }
 
+/**
+ * Distinct types
+ * @description Supported distinct types:
+ * POSTGRES: distinct on
+ * ALL: any RDB distinct
+ */
 export type TDistinct = 'disabled' | 'postgres' | 'all';
 
 type TOrderExpressions = {
