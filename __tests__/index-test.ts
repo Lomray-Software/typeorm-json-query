@@ -1401,7 +1401,7 @@ describe('services/typeorm-json-query', () => {
 
     expect(() =>
       instance['applyDistinctSelectToQuery'](qb, [
-        { name: 'id' },
+        { name: 'id', isDistinct: false },
         { name: 'param', isDistinct: true },
       ]),
     ).to.throw('Invalid json query: distinct type.');
@@ -1412,7 +1412,7 @@ describe('services/typeorm-json-query', () => {
     const instance = TypeormJsonQuery.init({ queryBuilder }, { distinctType: DistinctType.ALL });
 
     instance['applyDistinctSelectToQuery'](qb, [
-      { name: 'id' },
+      { name: 'id', isDistinct: false },
       { name: 'param', isDistinct: true },
     ]);
 
@@ -1430,7 +1430,7 @@ describe('services/typeorm-json-query', () => {
     );
 
     instance['applyDistinctSelectToQuery'](qb, [
-      { name: 'id' },
+      { name: 'id', isDistinct: false },
       { name: 'param', isDistinct: true },
     ]);
 
@@ -1438,5 +1438,75 @@ describe('services/typeorm-json-query', () => {
       'SELECT DISTINCT ON (param) id, param FROM "test_entity" "TestEntity"',
       [],
     ]);
+  });
+
+  it('should do not call apply attributes to query if attributes are empty', () => {
+    const qb = repository.createQueryBuilder();
+    const applyDistinctSelectToQueryStub = sandbox.stub();
+
+    emptyInstance['applySelectAttributes'].call(
+      { applyDistinctSelectToQuery: applyDistinctSelectToQueryStub },
+      qb,
+      [],
+    );
+
+    expect(applyDistinctSelectToQueryStub).to.not.called;
+  });
+
+  it('should call apply attributes to query with distinct', () => {
+    const qb = repository.createQueryBuilder();
+    const applyDistinctSelectToQueryStub = sandbox.stub();
+
+    emptyInstance['applySelectAttributes'].call(
+      {
+        applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
+        options: { distinctType: DistinctType.POSTGRES },
+      },
+      qb,
+      [
+        { name: 'id', isDistinct: false },
+        { name: 'param', isDistinct: true },
+      ],
+    );
+
+    expect(applyDistinctSelectToQueryStub).to.calledOnce;
+  });
+
+  it('should call apply attributes to query without distinct: options distinct disabled', () => {
+    const qb = repository.createQueryBuilder();
+    const applyDistinctSelectToQueryStub = sandbox.stub();
+
+    emptyInstance['applySelectAttributes'].call(
+      {
+        applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
+        options: { distinctType: DistinctType.DISABLED },
+      },
+      qb,
+      [
+        { name: 'id', isDistinct: false },
+        { name: 'param', isDistinct: true },
+      ],
+    );
+
+    expect(applyDistinctSelectToQueryStub).to.not.called;
+  });
+
+  it('should call apply attributes to query without distinct: attributes without distinct', () => {
+    const qb = repository.createQueryBuilder();
+    const applyDistinctSelectToQueryStub = sandbox.stub();
+
+    emptyInstance['applySelectAttributes'].call(
+      {
+        applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
+        options: { distinctType: DistinctType.DISABLED },
+      },
+      qb,
+      [
+        { name: 'id', isDistinct: false },
+        { name: 'param', isDistinct: false },
+      ],
+    );
+
+    expect(applyDistinctSelectToQueryStub).to.not.called;
   });
 });

@@ -1118,6 +1118,28 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Apply select attributes
+   */
+  private applySelectAttributes(
+    query: SelectQueryBuilder<TEntity>,
+    attributes: IAttribute[],
+  ): void {
+    if (!attributes.length) {
+      return;
+    }
+
+    const { distinctType } = this.options;
+
+    // Build distinct only if enabled distinct and distinct attributes exists
+    if (distinctType !== DistinctType.DISABLED && attributes.some(({ isDistinct }) => isDistinct)) {
+      return this.applyDistinctSelectToQuery(query, attributes);
+    }
+
+    // Add regular select
+    query.select(attributes.map(({ name }) => name));
+  }
+
+  /**
    * Convert json query to typeorm condition
    */
   public toQuery({
@@ -1129,7 +1151,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     page,
     pageSize,
   }: IJsonQuery<TEntity> = {}): ITypeormJsonQueryArgs<TEntity>['queryBuilder'] {
-    const { isDisablePagination, isLateralJoins, distinctType } = this.options;
+    const { isDisablePagination, isLateralJoins } = this.options;
     const { page: queryPage, pageSize: queryPageSize } = this.query;
 
     const queryBuilder = this.queryBuilder.clone();
@@ -1138,7 +1160,6 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const conditions = this.getWhere(where);
     const sorting = this.getOrderBy(orderBy);
     const groupByAttr = this.getGroupBy(groupBy);
-    const isDistinctAttributesExist = selectAttributes.some(({ isDistinct }) => isDistinct);
 
     sorting.forEach(({ field, value, nulls }) => queryBuilder.addOrderBy(field, value, nulls));
     relations.forEach(({ property, alias, where: relationWhere, parameters, isSelect }) =>
@@ -1152,12 +1173,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     conditions.forEach((condition) => queryBuilder.andWhere(condition));
     groupByAttr.forEach((field) => queryBuilder.addGroupBy(field));
 
-    if (selectAttributes.length) {
-      // Build distinct only if enabled distinct and distinct attributes exists
-      distinctType !== DistinctType.DISABLED && isDistinctAttributesExist
-        ? this.applyDistinctSelectToQuery(queryBuilder, selectAttributes)
-        : queryBuilder.select(selectAttributes.map(({ name }) => name));
-    }
+    this.applySelectAttributes(queryBuilder, selectAttributes);
 
     // pagination
     if (!isDisablePagination) {
