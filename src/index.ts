@@ -29,12 +29,6 @@ export interface ITypeormRelationOptions {
   isDisabled?: boolean;
 }
 
-export enum DistinctType {
-  DISABLED = 'disabled',
-  POSTGRES = 'postgres', // Apply postrges distinct on
-  ALL = 'all', // Apply any RDB distinct
-}
-
 export interface IAttribute extends Required<Pick<IJsonQueryAttribute, 'isDistinct'>> {
   name: string;
 }
@@ -50,7 +44,7 @@ export interface ITypeormJsonQueryOptions {
   maxDeepWhere: number;
   defaultRelationPageSize: number;
   defaultRelationMaxPageSize: number;
-  distinctType: DistinctType; // Default - disabled
+  distinctType: TDistinct; // Default - postgres
   /**
    *  E.g.: ['*'] - disable select relations (only join) or ['relation', { name: 'some-relation', isSelect: false, isLateral: true }]
    *  NOTE: by default DISABLE select provided relations
@@ -81,6 +75,8 @@ export interface IJsonRelationResult {
   isLateral?: boolean;
   isSelect?: boolean;
 }
+
+export type TDistinct = 'disabled' | 'postgres' | 'all';
 
 type TOrderExpressions = {
   field: string;
@@ -126,7 +122,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     isDisableOrderBy: false,
     isDisableGroupBy: false,
     isDisablePagination: false,
-    distinctType: DistinctType.POSTGRES,
+    distinctType: 'postgres',
     isLateralJoins: true,
   };
 
@@ -249,7 +245,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
           [fieldName]: {
             name: fieldName,
             isDistinct:
-              distinctType === DistinctType.DISABLED || typeof field === 'string'
+              distinctType === 'disabled' || typeof field === 'string'
                 ? false
                 : Boolean(field?.isDistinct),
           },
@@ -1079,7 +1075,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const { distinctType } = this.options;
 
     // Validate distinct type
-    if (!distinctType || distinctType === DistinctType.DISABLED) {
+    if (!distinctType || distinctType === 'disabled') {
       throw new Error('Invalid json query: distinct type.');
     }
 
@@ -1108,7 +1104,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       return;
     }
 
-    if (distinctType === DistinctType.ALL) {
+    if (distinctType === 'all') {
       query.distinct(true);
 
       return;
@@ -1131,7 +1127,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const { distinctType } = this.options;
 
     // Build distinct only if enabled distinct and distinct attributes exists
-    if (distinctType !== DistinctType.DISABLED && attributes.some(({ isDistinct }) => isDistinct)) {
+    if (distinctType !== 'disabled' && attributes.some(({ isDistinct }) => isDistinct)) {
       return this.applyDistinctSelectToQuery(query, attributes);
     }
 
