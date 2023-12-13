@@ -13,7 +13,7 @@ import type { Brackets } from 'typeorm';
 import { SelectQueryBuilder } from 'typeorm';
 import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
-import TypeormJsonQuery, { DistinctType } from '@src/index';
+import TypeormJsonQuery from '@src/index';
 
 describe('services/typeorm-json-query', () => {
   const sandbox = sinon.createSandbox();
@@ -386,10 +386,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should correctly build select params when distinct attributes is exist for all distinct type', () => {
-    const result = TypeormJsonQuery.init(
-      { queryBuilder },
-      { distinctType: DistinctType.ALL },
-    ).toQuery({
+    const result = TypeormJsonQuery.init({ queryBuilder }, { distinctType: 'all' }).toQuery({
       attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
     });
 
@@ -399,10 +396,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should correctly build select and ignore provided distinct when distinct option is disabled', () => {
-    const result = TypeormJsonQuery.init(
-      { queryBuilder },
-      { distinctType: DistinctType.DISABLED },
-    ).toQuery({
+    const result = TypeormJsonQuery.init({ queryBuilder }, { distinctType: 'disabled' }).toQuery({
       attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
     });
 
@@ -410,10 +404,7 @@ describe('services/typeorm-json-query', () => {
   });
 
   it('should correctly build select and ignore provided distinct when distinct option is disabled', () => {
-    const result = TypeormJsonQuery.init(
-      { queryBuilder },
-      { distinctType: DistinctType.DISABLED },
-    ).toQuery({
+    const result = TypeormJsonQuery.init({ queryBuilder }, { distinctType: 'disabled' }).toQuery({
       attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
     });
 
@@ -1237,7 +1228,7 @@ describe('services/typeorm-json-query', () => {
           // @ts-ignore
           query: { attributes },
         },
-        { distinctType: DistinctType.ALL },
+        { distinctType: 'all' },
       )
         .toQuery()
         .getQuery();
@@ -1254,7 +1245,7 @@ describe('services/typeorm-json-query', () => {
         queryBuilder,
         query: { attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }] },
       },
-      { distinctType: DistinctType.DISABLED },
+      { distinctType: 'disabled' },
     )
       .toQuery()
       .getQuery();
@@ -1394,10 +1385,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should throw error on apply select with distinct if distinct disabled', () => {
     const qb = repository.createQueryBuilder();
-    const instance = TypeormJsonQuery.init(
-      { queryBuilder },
-      { distinctType: DistinctType.DISABLED },
-    );
+    const instance = TypeormJsonQuery.init({ queryBuilder }, { distinctType: 'disabled' });
 
     expect(() =>
       instance['applyDistinctSelectToQuery'](qb, [
@@ -1409,7 +1397,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should correctly apply select with all distinct', () => {
     const qb = repository.createQueryBuilder();
-    const instance = TypeormJsonQuery.init({ queryBuilder }, { distinctType: DistinctType.ALL });
+    const instance = TypeormJsonQuery.init({ queryBuilder }, { distinctType: 'all' });
 
     instance['applyDistinctSelectToQuery'](qb, [
       { name: 'id', isDistinct: false },
@@ -1424,10 +1412,7 @@ describe('services/typeorm-json-query', () => {
 
   it('should correctly apply select with postgres distinct', () => {
     const qb = repository.createQueryBuilder();
-    const instance = TypeormJsonQuery.init(
-      { queryBuilder },
-      { distinctType: DistinctType.POSTGRES },
-    );
+    const instance = TypeormJsonQuery.init({ queryBuilder }, { distinctType: 'postgres' });
 
     instance['applyDistinctSelectToQuery'](qb, [
       { name: 'id', isDistinct: false },
@@ -1460,7 +1445,7 @@ describe('services/typeorm-json-query', () => {
     emptyInstance['applySelectAttributes'].call(
       {
         applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
-        options: { distinctType: DistinctType.POSTGRES },
+        options: { distinctType: 'postgres' },
       },
       qb,
       [
@@ -1479,7 +1464,7 @@ describe('services/typeorm-json-query', () => {
     emptyInstance['applySelectAttributes'].call(
       {
         applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
-        options: { distinctType: DistinctType.DISABLED },
+        options: { distinctType: 'disabled' },
       },
       qb,
       [
@@ -1498,7 +1483,7 @@ describe('services/typeorm-json-query', () => {
     emptyInstance['applySelectAttributes'].call(
       {
         applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
-        options: { distinctType: DistinctType.DISABLED },
+        options: { distinctType: 'disabled' },
       },
       qb,
       [
