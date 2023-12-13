@@ -15,6 +15,7 @@ import {
 } from '@lomray/microservices-types';
 import type { SelectQueryBuilder, WhereExpressionBuilder } from 'typeorm';
 import { Brackets } from 'typeorm';
+import DistinctType from './distinct-type';
 
 export interface ITypeormJsonQueryArgs<TEntity = ObjectLiteral> {
   queryBuilder: SelectQueryBuilder<TEntity>;
@@ -27,12 +28,6 @@ export interface ITypeormRelationOptions {
   isSelect?: boolean;
   isLateral?: boolean;
   isDisabled?: boolean;
-}
-
-export enum DistinctType {
-  DISABLED = 'disabled',
-  POSTGRES = 'postgres', // Apply postrges distinct on
-  ALL = 'all', // Apply any RDB distinct
 }
 
 export interface IAttribute extends Required<Pick<IJsonQueryAttribute, 'isDistinct'>> {
@@ -1029,7 +1024,9 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
 
     Object.entries(condition).forEach(([field, value]) => {
       switch (field) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
         case JQJunction.or:
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison,no-fallthrough
         case JQJunction.and:
           if (!Array.isArray(value)) {
             throw new Error(`Invalid json query: "${field}" should be array.`);

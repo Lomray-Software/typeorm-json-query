@@ -14,10 +14,13 @@
     "lib": [
       "es6",
       "es2015",
-      "es2017"
+      "es2017",
+      "es2019",
+      "es2021"
     ],
-    "module": "commonjs",
+    "module": "ES2022",
     "moduleResolution": "Node",
+    "target": "ESNext",
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
@@ -27,7 +30,6 @@
     "strict": false,
     "pretty": true,
     "suppressImplicitAnyIndexErrors": true,
-    "target": "es5",
     "baseUrl": ".",
     "paths": {
       "@__mocks__/*": ["./__mocks__/*"],
@@ -36,7 +38,6 @@
   },
   "exclude": [
     "node_modules",
-    "build",
     "lib",
     "commitlint.config.js",
     "nyc.config.js",

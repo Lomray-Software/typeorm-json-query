@@ -1,20 +1,32 @@
 import typescript from 'rollup-plugin-ts';
-import ttypescript from 'ttypescript';
 
 export default {
   input: 'src/index.ts',
   output: {
-    file: 'lib/index.js',
-    format: 'cjs'
+    dir: 'lib',
+    format: 'es',
+    sourcemap: true,
+    preserveModules: true,
+    preserveModulesRoot: 'src',
+    exports: 'auto',
   },
+  external: [
+    'typeorm',
+    '@lomray/microservices-types',
+  ],
   plugins: [
     typescript({
-      typescript: ttypescript,
       tsconfig: resolvedConfig => ({
         ...resolvedConfig,
         declaration: true,
+        importHelpers: true,
+        plugins: [
+          {
+            "transform": "@zerollup/ts-transform-paths",
+            "exclude": ["*"]
+          }
+        ]
       }),
     }),
   ],
-  external: ['typeorm', '@lomray/microservices-types'],
 };

@@ -13,7 +13,8 @@ import type { Brackets } from 'typeorm';
 import { SelectQueryBuilder } from 'typeorm';
 import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
-import TypeormJsonQuery, { DistinctType } from '@src/index';
+import DistinctType from '@src/distinct-type';
+import TypeormJsonQuery from '@src/index';
 
 describe('services/typeorm-json-query', () => {
   const sandbox = sinon.createSandbox();

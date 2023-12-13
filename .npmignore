@@ -12,10 +12,10 @@ coverage
 .gitattributes
 .editorconfig
 .eslintignore
-.eslintrc.js
-.lintstagedrc.js
+.eslintrc.cjs
+.lintstagedrc.cjs
 .mocharc.js
-.prettierrc.js
+.prettierrc.cjs
 .nvmrc
 commitlint.config.js
 nyc.config.js
