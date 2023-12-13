@@ -35,6 +35,10 @@ export enum DistinctType {
   ALL = 'all', // Apply any RDB distinct
 }
 
+export interface IAttribute extends Required<Pick<IJsonQueryAttribute, 'isDistinct'>> {
+  name: string;
+}
+
 export interface ITypeormJsonQueryOptions {
   defaultPageSize: number;
   // 0 - disable (query all items), 200 - default value
@@ -221,7 +225,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   /**
    * Get query attributes
    */
-  public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): IJsonQueryAttribute[] {
+  public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): IAttribute[] {
     const { isDisableAttributes, distinctType } = this.options;
 
     return Object.values(
@@ -229,40 +233,28 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         ...(isDisableAttributes ? [] : this.query.attributes || []),
         ...attrs,
         ...(this.authQuery.attributes || []),
-      ].reduce(
-        (
-          res: Record<
-            IJsonQueryAttribute['name'],
-            { name: IJsonQueryAttribute['name']; isDistinct: boolean }
-          >,
-          field,
-        ) => {
-          if (
-            !field ||
-            (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))
-          ) {
-            throw new Error(
-              'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
-            );
-          }
-
-          const fieldName = this.withFieldAlias(
-            (typeof field === 'object' ? field.name : field) as string,
+      ].reduce((res: Record<string, IAttribute>, field) => {
+        if (!field || (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))) {
+          throw new Error(
+            'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
           );
+        }
 
-          return {
-            ...res,
-            [fieldName]: {
-              name: fieldName,
-              isDistinct:
-                distinctType === DistinctType.DISABLED || typeof field === 'string'
-                  ? false
-                  : Boolean(field?.isDistinct),
-            },
-          };
-        },
-        {},
-      ),
+        const fieldName = this.withFieldAlias(
+          (typeof field === 'object' ? field.name : field) as string,
+        );
+
+        return {
+          ...res,
+          [fieldName]: {
+            name: fieldName,
+            isDistinct:
+              distinctType === DistinctType.DISABLED || typeof field === 'string'
+                ? false
+                : Boolean(field?.isDistinct),
+          },
+        };
+      }, {}),
     );
   }
 
@@ -1082,7 +1074,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
    */
   private applyDistinctSelectToQuery(
     query: SelectQueryBuilder<TEntity>,
-    attributes: IJsonQueryAttribute[],
+    attributes: IAttribute[],
   ): void {
     const { distinctType } = this.options;
 
@@ -1097,10 +1089,10 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       distinctFields: string[];
     }>(
       (res, { name, isDistinct }) => {
-        res.selectFields.push(name as string);
+        res.selectFields.push(name);
 
         if (isDistinct) {
-          res.distinctFields.push(name as string);
+          res.distinctFields.push(name);
         }
 
         return res;
@@ -1164,7 +1156,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
       // Build distinct only if enabled distinct and distinct attributes exists
       distinctType !== DistinctType.DISABLED && isDistinctAttributesExist
         ? this.applyDistinctSelectToQuery(queryBuilder, selectAttributes)
-        : queryBuilder.select(selectAttributes.map(({ name }) => name as string));
+        : queryBuilder.select(selectAttributes.map(({ name }) => name));
     }
 
     // pagination
