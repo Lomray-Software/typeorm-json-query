@@ -1509,4 +1509,28 @@ describe('services/typeorm-json-query', () => {
 
     expect(applyDistinctSelectToQueryStub).to.not.called;
   });
+
+  it('should correctly build select distinct query', () => {
+    const instance = TypeormJsonQuery.init({
+      queryBuilder,
+      query: {
+        attributes: [
+          { name: 'id', isDistinct: false },
+          { name: 'param', isDistinct: true },
+        ],
+      },
+    });
+
+    instance['applySelectAttributes'](queryBuilder, [
+      { name: 'id', isDistinct: false },
+      { name: 'param', isDistinct: true },
+    ]);
+
+    expect(queryBuilder.getQuery()).to.equal(
+      'SELECT DISTINCT ON (param) id, param FROM "test_entity" "TestEntity"',
+    );
+    expect(queryBuilder.getSql()).to.equal(
+      'SELECT DISTINCT ON (param) id, param FROM "test_entity" "TestEntity"',
+    );
+  });
 });
