@@ -229,28 +229,40 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
         ...(isDisableAttributes ? [] : this.query.attributes || []),
         ...attrs,
         ...(this.authQuery.attributes || []),
-      ].reduce((res: object, field) => {
-        if (!field || (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))) {
-          throw new Error(
-            'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
+      ].reduce(
+        (
+          res: Record<
+            IJsonQueryAttribute['name'],
+            { name: IJsonQueryAttribute['name']; isDistinct: boolean }
+          >,
+          field,
+        ) => {
+          if (
+            !field ||
+            (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))
+          ) {
+            throw new Error(
+              'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
+            );
+          }
+
+          const fieldName = this.withFieldAlias(
+            (typeof field === 'object' ? field.name : field) as string,
           );
-        }
 
-        const fieldName = this.withFieldAlias(
-          (typeof field === 'object' ? field.name : field) as string,
-        );
-
-        return {
-          ...res,
-          [fieldName]: {
-            name: fieldName,
-            isDistinct:
-              distinctType === DistinctType.DISABLED || typeof field === 'string'
-                ? false
-                : Boolean(field?.isDistinct),
-          },
-        };
-      }, {}),
+          return {
+            ...res,
+            [fieldName]: {
+              name: fieldName,
+              isDistinct:
+                distinctType === DistinctType.DISABLED || typeof field === 'string'
+                  ? false
+                  : Boolean(field?.isDistinct),
+            },
+          };
+        },
+        {},
+      ),
     );
   }
 
