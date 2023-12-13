@@ -1,5 +1,6 @@
 import type {
   IJsonQuery,
+  IJsonQueryAttribute,
   IJsonQueryOrderField,
   IJsonQueryWhere,
   ObjectLiteral,
@@ -28,6 +29,16 @@ export interface ITypeormRelationOptions {
   isDisabled?: boolean;
 }
 
+export enum DistinctType {
+  DISABLED = 'disabled',
+  POSTGRES = 'postgres', // Apply postrges distinct on
+  ALL = 'all', // Apply any RDB distinct
+}
+
+export interface IAttribute extends Required<Pick<IJsonQueryAttribute, 'isDistinct'>> {
+  name: string;
+}
+
 export interface ITypeormJsonQueryOptions {
   defaultPageSize: number;
   // 0 - disable (query all items), 200 - default value
@@ -39,6 +50,7 @@ export interface ITypeormJsonQueryOptions {
   maxDeepWhere: number;
   defaultRelationPageSize: number;
   defaultRelationMaxPageSize: number;
+  distinctType: DistinctType; // Default - disabled
   /**
    *  E.g.: ['*'] - disable select relations (only join) or ['relation', { name: 'some-relation', isSelect: false, isLateral: true }]
    *  NOTE: by default DISABLE select provided relations
@@ -114,6 +126,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     isDisableOrderBy: false,
     isDisableGroupBy: false,
     isDisablePagination: false,
+    distinctType: DistinctType.POSTGRES,
     isLateralJoins: true,
   };
 
@@ -212,22 +225,37 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   /**
    * Get query attributes
    */
-  public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): string[] {
-    const { isDisableAttributes } = this.options;
+  public getAttributes(attrs: IJsonQuery<TEntity>['attributes'] = []): IAttribute[] {
+    const { isDisableAttributes, distinctType } = this.options;
 
-    const attributes = [
-      ...(isDisableAttributes ? [] : this.query.attributes ?? []),
-      ...attrs,
-      ...(this.authQuery.attributes || []),
-    ].map((field) => {
-      if (!field || typeof field !== 'string') {
-        throw new Error('Invalid json query: some attribute has incorrect name.');
-      }
+    return Object.values(
+      [
+        ...(isDisableAttributes ? [] : this.query.attributes || []),
+        ...attrs,
+        ...(this.authQuery.attributes || []),
+      ].reduce((res: Record<string, IAttribute>, field) => {
+        if (!field || (typeof field !== 'string' && (typeof field !== 'object' || !field?.name))) {
+          throw new Error(
+            'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
+          );
+        }
 
-      return this.withFieldAlias(field);
-    });
+        const fieldName = this.withFieldAlias(
+          (typeof field === 'object' ? field.name : field) as string,
+        );
 
-    return [...new Set(attributes)];
+        return {
+          ...res,
+          [fieldName]: {
+            name: fieldName,
+            isDistinct:
+              distinctType === DistinctType.DISABLED || typeof field === 'string'
+                ? false
+                : Boolean(field?.isDistinct),
+          },
+        };
+      }, {}),
+    );
   }
 
   /**
@@ -1042,6 +1070,76 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
   }
 
   /**
+   * Apply distinct select to query
+   */
+  private applyDistinctSelectToQuery(
+    query: SelectQueryBuilder<TEntity>,
+    attributes: IAttribute[],
+  ): void {
+    const { distinctType } = this.options;
+
+    // Validate distinct type
+    if (!distinctType || distinctType === DistinctType.DISABLED) {
+      throw new Error('Invalid json query: distinct type.');
+    }
+
+    // Build sql select with distinct
+    const { selectFields, distinctFields } = attributes.reduce<{
+      selectFields: string[];
+      distinctFields: string[];
+    }>(
+      (res, { name, isDistinct }) => {
+        res.selectFields.push(name);
+
+        if (isDistinct) {
+          res.distinctFields.push(name);
+        }
+
+        return res;
+      },
+      { selectFields: [], distinctFields: [] },
+    );
+
+    // Apply select
+    query.select(selectFields);
+
+    // Apply distinct
+    if (!distinctFields.length) {
+      return;
+    }
+
+    if (distinctType === DistinctType.ALL) {
+      query.distinct(true);
+
+      return;
+    }
+
+    query.distinctOn(distinctFields);
+  }
+
+  /**
+   * Apply select attributes
+   */
+  private applySelectAttributes(
+    query: SelectQueryBuilder<TEntity>,
+    attributes: IAttribute[],
+  ): void {
+    if (!attributes.length) {
+      return;
+    }
+
+    const { distinctType } = this.options;
+
+    // Build distinct only if enabled distinct and distinct attributes exists
+    if (distinctType !== DistinctType.DISABLED && attributes.some(({ isDistinct }) => isDistinct)) {
+      return this.applyDistinctSelectToQuery(query, attributes);
+    }
+
+    // Add regular select
+    query.select(attributes.map(({ name }) => name));
+  }
+
+  /**
    * Convert json query to typeorm condition
    */
   public toQuery({
@@ -1057,7 +1155,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     const { page: queryPage, pageSize: queryPageSize } = this.query;
 
     const queryBuilder = this.queryBuilder.clone();
-    const select = this.getAttributes(attributes);
+    const selectAttributes = this.getAttributes(attributes);
     const relations = this.getRelations(extraRelations);
     const conditions = this.getWhere(where);
     const sorting = this.getOrderBy(orderBy);
@@ -1075,9 +1173,7 @@ class TypeormJsonQuery<TEntity = ObjectLiteral> {
     conditions.forEach((condition) => queryBuilder.andWhere(condition));
     groupByAttr.forEach((field) => queryBuilder.addGroupBy(field));
 
-    if (select.length) {
-      queryBuilder.select(select);
-    }
+    this.applySelectAttributes(queryBuilder, selectAttributes);
 
     // pagination
     if (!isDisablePagination) {

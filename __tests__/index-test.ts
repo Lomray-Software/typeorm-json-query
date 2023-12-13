@@ -13,7 +13,7 @@ import type { Brackets } from 'typeorm';
 import { SelectQueryBuilder } from 'typeorm';
 import TestEntity from '@__mocks__/entities/test-entity';
 import TypeormMock from '@__mocks__/typeorm';
-import TypeormJsonQuery from '@src/index';
+import TypeormJsonQuery, { DistinctType } from '@src/index';
 
 describe('services/typeorm-json-query', () => {
   const sandbox = sinon.createSandbox();
@@ -165,17 +165,59 @@ describe('services/typeorm-json-query', () => {
     // @ts-ignore
     const res = instance.getAttributes(['param2']);
 
-    expect(res).to.deep.equal(['TestEntity.param2', 'TestEntity.param']);
+    expect(res).to.deep.equal([
+      {
+        isDistinct: false,
+        name: 'TestEntity.param2',
+      },
+      {
+        isDistinct: false,
+        name: 'TestEntity.param',
+      },
+    ]);
+  });
+
+  it('should return only unique attributes', () => {
+    const duplicatedAttributes = [
+      ...new Array(5).fill({ name: 'id' }),
+      { name: 'param' },
+      { name: 'param' },
+    ];
+    const instance = TypeormJsonQuery.init(
+      {
+        queryBuilder,
+        query: { attributes: duplicatedAttributes },
+      },
+      { isDisableAttributes: true },
+    );
+
+    // @ts-ignore
+    const res = instance.getAttributes(duplicatedAttributes);
+
+    expect(res).to.deep.equal([
+      {
+        isDistinct: false,
+        name: 'TestEntity.id',
+      },
+      {
+        isDistinct: false,
+        name: 'TestEntity.param',
+      },
+    ]);
   });
 
   it('should return attributes with aliases', () => {
     const attributes = commonInstance.getAttributes();
 
+    const expected = withAlias([
+      ...(commonQueryAttributes as string[]),
+      ...(commonAuthQueryAttributes as string[]),
+    ]);
+
     expect(attributes).to.deep.equal(
-      withAlias([
-        ...(commonQueryAttributes as string[]),
-        ...(commonAuthQueryAttributes as string[]),
-      ]),
+      typeof expected === 'string'
+        ? { name: expected }
+        : expected.map((name) => ({ name, isDistinct: false })),
     );
   });
 
@@ -183,11 +225,15 @@ describe('services/typeorm-json-query', () => {
     const attr = `${queryBuilder.alias}.param` as unknown as 'param'; // attribute with alias
     const attributes = commonInstance.getAttributes([attr]);
 
+    const expected = withAlias([
+      ...(commonQueryAttributes as string[]),
+      ...(commonAuthQueryAttributes as string[]),
+    ]);
+
     expect(attributes).to.deep.equal(
-      withAlias([
-        ...(commonQueryAttributes as string[]),
-        ...(commonAuthQueryAttributes as string[]),
-      ]),
+      typeof expected === 'string'
+        ? { name: expected }
+        : expected.map((name) => ({ name, isDistinct: false })),
     );
   });
 
@@ -196,7 +242,9 @@ describe('services/typeorm-json-query', () => {
       // @ts-ignore
       const result = () => commonInstance.getAttributes([type]);
 
-      expect(result).to.throw('some attribute has incorrect name');
+      expect(result).to.throw(
+        'Invalid json query: some attribute has an incorrect type or is not a valid IJsonAttribute.',
+      );
     }
   });
 
@@ -204,12 +252,14 @@ describe('services/typeorm-json-query', () => {
     // @ts-ignore
     const attributes = commonInstance.getAttributes(['id', 'rel1.id', 'rel1.rel2.id']);
 
-    expect(attributes).to.deep.equal([
-      ...withAlias([...(commonQueryAttributes as string[])]),
-      'rel1.id',
-      'rel1_rel2.id',
-      ...withAlias([...(commonAuthQueryAttributes as string[])]),
-    ]);
+    expect(attributes).to.deep.equal(
+      [
+        ...withAlias([...(commonQueryAttributes as string[])]),
+        'rel1.id',
+        'rel1_rel2.id',
+        ...withAlias([...(commonAuthQueryAttributes as string[])]),
+      ].map((name) => ({ name, isDistinct: false })),
+    );
   });
 
   it('should return empty group by: disable group by', () => {
@@ -323,6 +373,51 @@ describe('services/typeorm-json-query', () => {
         nulls: 'NULLS FIRST',
       },
     ]);
+  });
+
+  it('should correctly build select params when distinct attributes is empty', () => {
+    const result = emptyInstance.toQuery({
+      attributes: ['id', 'param'],
+    });
+
+    expect(result.getQuery()).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should correctly build select params when distinct attributes is exist for all distinct type', () => {
+    const result = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.ALL },
+    ).toQuery({
+      attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
+    });
+
+    expect(result.getQuery()).to.equal(
+      'SELECT DISTINCT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should correctly build select and ignore provided distinct when distinct option is disabled', () => {
+    const result = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.DISABLED },
+    ).toQuery({
+      attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
+    });
+
+    expect(result.getQuery()).to.not.include('DISTINCT');
+  });
+
+  it('should correctly build select and ignore provided distinct when distinct option is disabled', () => {
+    const result = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.DISABLED },
+    ).toQuery({
+      attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }],
+    });
+
+    expect(result.getQuery()).to.not.include('DISTINCT');
   });
 
   it('should throw error orderBy: validation failed', () => {
@@ -1068,6 +1163,107 @@ describe('services/typeorm-json-query', () => {
     );
   });
 
+  it('should return query with postres distinct on param with literal and ijson query attributes', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: { attributes: ['id', { name: 'param', isDistinct: true }] },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT DISTINCT ON ("TestEntity"."param") "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should return query with without distinct for ijson query attributes', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: { attributes: [{ name: 'id' }, { name: 'param' }] },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should return query with postres distinct on param', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: { attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }] },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT DISTINCT ON ("TestEntity"."param") "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should return query with postres distinct on id and param', () => {
+    const qbResult = TypeormJsonQuery.init({
+      queryBuilder,
+      query: {
+        attributes: [
+          { name: 'id', isDistinct: true },
+          { name: 'param', isDistinct: true },
+        ],
+      },
+    })
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT DISTINCT ON ("TestEntity"."id", "TestEntity"."param") "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
+  it('should return query with all RDB distinct', () => {
+    const attributesData = [
+      [{ name: 'id' }, { name: 'param', isDistinct: true }],
+      [{ name: 'id', isDistinct: true }, { name: 'param' }],
+      [
+        { name: 'id', isDistinct: true },
+        { name: 'param', isDistinct: true },
+      ],
+    ];
+
+    for (const attributes of attributesData) {
+      const qbResult = TypeormJsonQuery.init(
+        {
+          queryBuilder,
+          // @ts-ignore
+          query: { attributes },
+        },
+        { distinctType: DistinctType.ALL },
+      )
+        .toQuery()
+        .getQuery();
+
+      expect(qbResult).to.equal(
+        'SELECT DISTINCT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+      );
+    }
+  });
+
+  it('should return query with disabled distinct on param', () => {
+    const qbResult = TypeormJsonQuery.init(
+      {
+        queryBuilder,
+        query: { attributes: [{ name: 'id' }, { name: 'param', isDistinct: true }] },
+      },
+      { distinctType: DistinctType.DISABLED },
+    )
+      .toQuery()
+      .getQuery();
+
+    expect(qbResult).to.equal(
+      'SELECT "TestEntity"."id" AS "TestEntity_id", "TestEntity"."param" AS "TestEntity_param" FROM "test_entity" "TestEntity" LIMIT 25',
+    );
+  });
+
   it('should return right query: with attributes, relation and disabled pagination', () => {
     const qbResult = TypeormJsonQuery.init(
       {
@@ -1193,6 +1389,148 @@ describe('services/typeorm-json-query', () => {
 
     expect(() => qbResult.toQuery()).to.throw(
       'Invalid json query: field value type or value is invalid.',
+    );
+  });
+
+  it('should throw error on apply select with distinct if distinct disabled', () => {
+    const qb = repository.createQueryBuilder();
+    const instance = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.DISABLED },
+    );
+
+    expect(() =>
+      instance['applyDistinctSelectToQuery'](qb, [
+        { name: 'id', isDistinct: false },
+        { name: 'param', isDistinct: true },
+      ]),
+    ).to.throw('Invalid json query: distinct type.');
+  });
+
+  it('should correctly apply select with all distinct', () => {
+    const qb = repository.createQueryBuilder();
+    const instance = TypeormJsonQuery.init({ queryBuilder }, { distinctType: DistinctType.ALL });
+
+    instance['applyDistinctSelectToQuery'](qb, [
+      { name: 'id', isDistinct: false },
+      { name: 'param', isDistinct: true },
+    ]);
+
+    expect(qb.getQueryAndParameters()).to.deep.equal([
+      'SELECT DISTINCT id, param FROM "test_entity" "TestEntity"',
+      [],
+    ]);
+  });
+
+  it('should correctly apply select with postgres distinct', () => {
+    const qb = repository.createQueryBuilder();
+    const instance = TypeormJsonQuery.init(
+      { queryBuilder },
+      { distinctType: DistinctType.POSTGRES },
+    );
+
+    instance['applyDistinctSelectToQuery'](qb, [
+      { name: 'id', isDistinct: false },
+      { name: 'param', isDistinct: true },
+    ]);
+
+    expect(qb.getQueryAndParameters()).to.deep.equal([
+      'SELECT DISTINCT ON (param) id, param FROM "test_entity" "TestEntity"',
+      [],
+    ]);
+  });
+
+  it('should do not call apply attributes to query if attributes are empty', () => {
+    const qb = repository.createQueryBuilder();
+    const applyDistinctSelectToQueryStub = sandbox.stub();
+
+    emptyInstance['applySelectAttributes'].call(
+      { applyDistinctSelectToQuery: applyDistinctSelectToQueryStub },
+      qb,
+      [],
+    );
+
+    expect(applyDistinctSelectToQueryStub).to.not.called;
+  });
+
+  it('should call apply attributes to query with distinct', () => {
+    const qb = repository.createQueryBuilder();
+    const applyDistinctSelectToQueryStub = sandbox.stub();
+
+    emptyInstance['applySelectAttributes'].call(
+      {
+        applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
+        options: { distinctType: DistinctType.POSTGRES },
+      },
+      qb,
+      [
+        { name: 'id', isDistinct: false },
+        { name: 'param', isDistinct: true },
+      ],
+    );
+
+    expect(applyDistinctSelectToQueryStub).to.calledOnce;
+  });
+
+  it('should call apply attributes to query without distinct: options distinct disabled', () => {
+    const qb = repository.createQueryBuilder();
+    const applyDistinctSelectToQueryStub = sandbox.stub();
+
+    emptyInstance['applySelectAttributes'].call(
+      {
+        applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
+        options: { distinctType: DistinctType.DISABLED },
+      },
+      qb,
+      [
+        { name: 'id', isDistinct: false },
+        { name: 'param', isDistinct: true },
+      ],
+    );
+
+    expect(applyDistinctSelectToQueryStub).to.not.called;
+  });
+
+  it('should call apply attributes to query without distinct: attributes without distinct', () => {
+    const qb = repository.createQueryBuilder();
+    const applyDistinctSelectToQueryStub = sandbox.stub();
+
+    emptyInstance['applySelectAttributes'].call(
+      {
+        applyDistinctSelectToQuery: applyDistinctSelectToQueryStub,
+        options: { distinctType: DistinctType.DISABLED },
+      },
+      qb,
+      [
+        { name: 'id', isDistinct: false },
+        { name: 'param', isDistinct: false },
+      ],
+    );
+
+    expect(applyDistinctSelectToQueryStub).to.not.called;
+  });
+
+  it('should correctly build select distinct query', () => {
+    const instance = TypeormJsonQuery.init({
+      queryBuilder,
+      query: {
+        attributes: [
+          { name: 'id', isDistinct: false },
+          { name: 'param', isDistinct: true },
+        ],
+      },
+    });
+
+    instance['applySelectAttributes'](queryBuilder, [
+      { name: 'id', isDistinct: false },
+      { name: 'param', isDistinct: true },
+    ]);
+
+    expect(queryBuilder.getQuery()).to.equal(
+      'SELECT DISTINCT ON (param) id, param FROM "test_entity" "TestEntity"',
+    );
+    expect(queryBuilder.getSql()).to.equal(
+      'SELECT DISTINCT ON (param) id, param FROM "test_entity" "TestEntity"',
     );
   });
 });
