@@ -1,0 +1,25 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "typeorm-json-query",
+  "description": "JSON filters for TypeORM 0.2.41 query builders.",
+  "branch": "prod",
+  "folders": [],
+  "excludeFolders": [
+    "node_modules",
+    ".github",
+    "src",
+    "lib",
+    "dist",
+    "__tests__",
+    "__mocks__"
+  ],
+  "excludeFiles": [
+    "CHANGELOG.md",
+    "LICENSE",
+    "CODE_OF_CONDUCT.md"
+  ],
+  "rules": [
+    "Use TypeORM 0.2.41 with release 2.7.0; do not substitute the TypeORM 0.3 DataSource API.",
+    "Import IJsonQuery from @lomray/microservices-types. PostgreSQL-specific defaults must be adjusted for other drivers."
+  ]
+}
