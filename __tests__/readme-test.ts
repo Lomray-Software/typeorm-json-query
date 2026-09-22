@@ -3,7 +3,8 @@ import path from 'path';
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
-const root = path.join(__dirname, '..');
+// npm test runs from the repository root in both CommonJS and native ESM.
+const root = process.cwd();
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as {
   name: string;
